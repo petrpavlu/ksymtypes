@@ -8,6 +8,7 @@ authors = ["Petr Pavlu <petr.pavlu@suse.com>"]
 edition = "2021"
 
 [dependencies]
+diffs = "0.5.1"
 env_logger = "0.11.1"
 getopts = "0.2"
 log = "0.4.20"

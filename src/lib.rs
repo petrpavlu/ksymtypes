@@ -45,10 +45,72 @@ impl std::fmt::Display for Error {
     }
 }
 
+struct UniDiff<'a> {
+    old: &'a Vec<String>,
+    new: &'a Vec<String>,
+    output: Vec<String>,
+}
+
+impl UniDiff<'_> {
+    fn push_output(&mut self, prefix: char, lines: &[String]) {
+        for line in lines.iter() {
+            let mut marked_line = String::new();
+            marked_line.push(prefix);
+            marked_line.push_str(line);
+            self.output.push(marked_line);
+        }
+    }
+}
+
+// TODO
+impl diffs::Diff for UniDiff<'_> {
+    type Error = Error;
+
+    fn equal(&mut self, old: usize, _new: usize, len: usize) -> Result<(), Self::Error> {
+        self.push_output(' ', &self.old[old..old + len]);
+        Ok(())
+    }
+
+    fn delete(&mut self, old: usize, len: usize, _new: usize) -> Result<(), Self::Error> {
+        self.push_output('-', &self.old[old..old + len]);
+        Ok(())
+    }
+
+    fn insert(&mut self, _old: usize, new: usize, new_len: usize) -> Result<(), Self::Error> {
+        self.push_output('+', &self.new[new..new + new_len]);
+        Ok(())
+    }
+
+    fn replace(
+        &mut self,
+        old: usize,
+        old_len: usize,
+        new: usize,
+        new_len: usize,
+    ) -> Result<(), Self::Error> {
+        self.push_output('-', &self.old[old..old + old_len]);
+        self.push_output('+', &self.new[new..new + new_len]);
+        Ok(())
+    }
+
+    fn finish(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
 #[derive(Eq, PartialEq)]
 enum Token {
     TypeRef(String),
     Atom(String),
+}
+
+impl Token {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::TypeRef(ref_name) => ref_name.as_str(),
+            Self::Atom(word) => word.as_str(),
+        }
+    }
 }
 
 type Tokens = Vec<Token>;
@@ -69,6 +131,8 @@ pub struct SymTypes {
     exports: Exports,
     files: SymFiles,
 }
+
+type TypeChanges<'a> = HashMap<&'a str, Vec<(&'a Tokens, &'a Tokens)>>;
 
 impl SymTypes {
     pub fn new(dir: &str) -> Result<Self, Error> {
@@ -302,13 +366,39 @@ impl SymTypes {
         }
     }
 
-    fn compare_types(
-        &self,
-        other: &SymTypes,
+    fn record_type_change<'a>(
+        name: &'a str,
+        tokens: &'a Tokens,
+        other_tokens: &'a Tokens,
+        changes: &mut TypeChanges<'a>,
+    ) {
+        match changes.get_mut(name) {
+            Some(variants) => {
+                for (tokens2, other_tokens2) in variants.iter() {
+                    if Self::are_tokens_eq(tokens, tokens2)
+                        && Self::are_tokens_eq(other_tokens, other_tokens2)
+                    {
+                        return;
+                    }
+                }
+                variants.push((tokens, other_tokens));
+            }
+            None => {
+                let mut variants = Vec::new();
+                variants.push((tokens, other_tokens));
+                changes.insert(name, variants);
+            }
+        }
+    }
+
+    fn compare_types<'a>(
+        &'a self,
+        other: &'a SymTypes,
         file: &SymFile,
         other_file: &SymFile,
-        name: &str,
+        name: &'a str,
         processed: &mut HashSet<String>,
+        changes: &mut TypeChanges<'a>,
     ) {
         match processed.get(name) {
             Some(_) => return,
@@ -328,7 +418,14 @@ impl SymTypes {
             is_equal &= match (token, other_token) {
                 (Token::TypeRef(ref_name), Token::TypeRef(other_ref_name)) => {
                     if ref_name == other_ref_name {
-                        self.compare_types(other, file, other_file, ref_name.as_str(), processed);
+                        self.compare_types(
+                            other,
+                            file,
+                            other_file,
+                            ref_name.as_str(),
+                            processed,
+                            changes,
+                        );
                         true
                     } else {
                         false
@@ -340,18 +437,93 @@ impl SymTypes {
         }
         if !is_equal {
             // TODO
-            println!("Type {} is not equal", name);
+            Self::record_type_change(name, tokens, other_tokens, changes);
+        }
+    }
+
+    fn pretty_format_type(name: &str, tokens: &Tokens) -> Vec<String> {
+        let mut res = Vec::new();
+        let mut indent = 0;
+
+        let mut line = name.to_string();
+        for token in tokens.iter() {
+            let mut newline = false;
+            match token.as_str() {
+                "{" => {
+                    line.push_str(" {");
+                    res.push(line);
+                    line = String::new();
+                    indent += 1;
+                    newline = true;
+                }
+                "}" => {
+                    line.push_str(" }");
+                    res.push(line);
+                    line = String::new();
+                    indent -= 1;
+                    newline = true;
+                }
+                ";" => {
+                    line.push_str(" ;");
+                    res.push(line);
+                    line = String::new();
+                    newline = true;
+                }
+                "," => {
+                    line.push_str(" ,");
+                    res.push(line);
+                    line = String::new();
+                    newline = true;
+                }
+                _ => {
+                    line.push(' ');
+                    line.push_str(token.as_str());
+                }
+            };
+            if newline {
+                for _ in 0..indent {
+                    line.push_str("\t");
+                }
+            }
+        }
+        res
+    }
+
+    fn print_type_change(name: &str, tokens: &Tokens, other_tokens: &Tokens) {
+        println!("{}", name);
+        let pretty = Self::pretty_format_type(name, tokens);
+        let other_pretty = Self::pretty_format_type(name, other_tokens);
+
+        let mut diff = UniDiff {
+            old: &pretty,
+            new: &other_pretty,
+            output: Vec::new(),
+        };
+        // TODO Check the result.
+        diffs::myers::diff(
+            &mut diff,
+            &pretty,
+            0,
+            pretty.len(),
+            &other_pretty,
+            0,
+            other_pretty.len(),
+        );
+        for line in diff.output.iter() {
+            println!("{}", line);
         }
     }
 
     pub fn compare_with(&self, other: &SymTypes) {
+        let mut changes = TypeChanges::new();
+
         for (name, file_idx) in self.exports.iter() {
             let file = &self.files[*file_idx];
             match other.exports.get(name) {
                 Some(other_file_idx) => {
                     let other_file = &other.files[*other_file_idx];
                     let mut processed = HashSet::new();
-                    self.compare_types(other, file, other_file, name, &mut processed);
+                    self.compare_types(other, file, other_file, name, &mut processed, &mut changes);
                 }
                 None => {
                     println!("Export {} is present in A but not in B", name);
@@ -366,6 +538,12 @@ impl SymTypes {
                 None => {
                     println!("Export {} is present in B but not in A", other_name);
                 }
+            }
+        }
+
+        for (name, variants) in changes.iter() {
+            for (tokens, other_tokens) in variants {
+                Self::print_type_change(name, tokens, other_tokens);
             }
         }
     }
