@@ -3,7 +3,7 @@
 
 use getopts::Options;
 use log::debug;
-use ksyms::SymTypes;
+use ksyms::sym::SymTypes;
 use std::{env, process};
 
 fn print_usage(program: &str, opts: Options) {
