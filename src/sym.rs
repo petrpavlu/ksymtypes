@@ -351,65 +351,6 @@ impl SymCorpus {
         }
     }
 
-    fn pretty_format_type(name: &str, tokens: &Tokens) -> Vec<String> {
-        let mut res = Vec::new();
-        let mut indent = 0;
-
-        let mut line = name.to_string();
-        for token in tokens.iter() {
-            let mut newline = false;
-            match token.as_str() {
-                "{" => {
-                    line.push_str(" {");
-                    res.push(line);
-                    line = String::new();
-                    indent += 1;
-                    newline = true;
-                }
-                "}" => {
-                    line.push_str(" }");
-                    res.push(line);
-                    line = String::new();
-                    indent -= 1;
-                    newline = true;
-                }
-                ";" => {
-                    line.push_str(" ;");
-                    res.push(line);
-                    line = String::new();
-                    newline = true;
-                }
-                "," => {
-                    line.push_str(" ,");
-                    res.push(line);
-                    line = String::new();
-                    newline = true;
-                }
-                _ => {
-                    line.push(' ');
-                    line.push_str(token.as_str());
-                }
-            };
-            if newline {
-                for _ in 0..indent {
-                    line.push_str("\t");
-                }
-            }
-        }
-        res
-    }
-
-    fn print_type_change(name: &str, tokens: &Tokens, other_tokens: &Tokens) {
-        println!("{}", name);
-        let pretty = Self::pretty_format_type(name, tokens);
-        let other_pretty = Self::pretty_format_type(name, other_tokens);
-
-        let diff_output = crate::diff::unified(&pretty, &other_pretty);
-        for line in diff_output.iter() {
-            println!("{}", line);
-        }
-    }
-
     pub fn compare_with(&self, other: &SymCorpus) {
         let mut changes = TypeChanges::new();
 
@@ -439,8 +380,67 @@ impl SymCorpus {
 
         for (name, variants) in changes.iter() {
             for (tokens, other_tokens) in variants {
-                Self::print_type_change(name, tokens, other_tokens);
+                print_type_change(name, tokens, other_tokens);
             }
         }
+    }
+}
+
+fn pretty_format_type(name: &str, tokens: &Tokens) -> Vec<String> {
+    let mut res = Vec::new();
+    let mut indent = 0;
+
+    let mut line = name.to_string();
+    for token in tokens.iter() {
+        let mut newline = false;
+        match token.as_str() {
+            "{" => {
+                line.push_str(" {");
+                res.push(line);
+                line = String::new();
+                indent += 1;
+                newline = true;
+            }
+            "}" => {
+                line.push_str(" }");
+                res.push(line);
+                line = String::new();
+                indent -= 1;
+                newline = true;
+            }
+            ";" => {
+                line.push_str(" ;");
+                res.push(line);
+                line = String::new();
+                newline = true;
+            }
+            "," => {
+                line.push_str(" ,");
+                res.push(line);
+                line = String::new();
+                newline = true;
+            }
+            _ => {
+                line.push(' ');
+                line.push_str(token.as_str());
+            }
+        };
+        if newline {
+            for _ in 0..indent {
+                line.push_str("\t");
+            }
+        }
+    }
+    res
+}
+
+fn print_type_change(name: &str, tokens: &Tokens, other_tokens: &Tokens) {
+    println!("{}", name);
+    let pretty = pretty_format_type(name, tokens);
+    let other_pretty = pretty_format_type(name, other_tokens);
+
+    let diff_output = crate::diff::unified(&pretty, &other_pretty);
+    for line in diff_output.iter() {
+        println!("{}", line);
     }
 }
