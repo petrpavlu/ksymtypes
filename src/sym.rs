@@ -36,8 +36,7 @@ struct SymFile {
 
 type SymFiles = Vec<SymFile>;
 
-// TODO Rename to SymCorpus.
-pub struct SymTypes {
+pub struct SymCorpus {
     types: Types,
     exports: Exports,
     files: SymFiles,
@@ -45,7 +44,7 @@ pub struct SymTypes {
 
 type TypeChanges<'a> = HashMap<&'a str, Vec<(&'a Tokens, &'a Tokens)>>;
 
-impl SymTypes {
+impl SymCorpus {
     pub fn new(dir: &str) -> Result<Self, crate::Error> {
         let mut symtypes = Self {
             types: Types::new(),
@@ -263,7 +262,7 @@ impl SymTypes {
         }
     }
 
-    fn get_type_tokens<'a>(symtypes: &'a SymTypes, file: &SymFile, name: &str) -> &'a Tokens {
+    fn get_type_tokens<'a>(symtypes: &'a SymCorpus, file: &SymFile, name: &str) -> &'a Tokens {
         match file.records.get(name) {
             Some(variant_idx) => match symtypes.types.get(name) {
                 Some(variants) => &variants[*variant_idx],
@@ -304,7 +303,7 @@ impl SymTypes {
 
     fn compare_types<'a>(
         &'a self,
-        other: &'a SymTypes,
+        other: &'a SymCorpus,
         file: &SymFile,
         other_file: &SymFile,
         name: &'a str,
@@ -411,7 +410,7 @@ impl SymTypes {
         }
     }
 
-    pub fn compare_with(&self, other: &SymTypes) {
+    pub fn compare_with(&self, other: &SymCorpus) {
         let mut changes = TypeChanges::new();
 
         for (name, file_idx) in self.exports.iter() {

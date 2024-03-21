@@ -3,7 +3,7 @@
 
 use getopts::Options;
 use log::debug;
-use ksyms::sym::SymTypes;
+use ksyms::sym::SymCorpus;
 use std::{env, process};
 
 fn print_usage(program: &str, opts: Options) {
@@ -15,14 +15,14 @@ fn compare_dirs(dir1: &str, dir2: &str) -> Result<(), ()> {
     debug!("Compare '{}' and '{}'", dir1, dir2);
 
     // TODO
-    let s1 = match SymTypes::new(dir1) {
+    let s1 = match SymCorpus::new(dir1) {
         Ok(s1) => s1,
         Err(err) => {
             eprintln!("Failed to read symtypes from '{}': {}", dir1, err);
             return Err(());
         }
     };
-    let s2 = match SymTypes::new(dir2) {
+    let s2 = match SymCorpus::new(dir2) {
         Ok(s2) => s2,
         Err(err) => {
             eprintln!("Failed to read symtypes from '{}': {}", dir2, err);
