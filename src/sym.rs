@@ -16,6 +16,16 @@ enum Token {
 }
 
 impl Token {
+    #[cfg(test)]
+    fn new_typeref<S: Into<String>>(name: S) -> Self {
+        Token::TypeRef(name.into())
+    }
+
+    #[cfg(test)]
+    fn new_atom<S: Into<String>>(name: S) -> Self {
+        Token::Atom(name.into())
+    }
+
     fn as_str(&self) -> &str {
         match self {
             Self::TypeRef(ref_name) => ref_name.as_str(),
@@ -386,58 +396,296 @@ impl SymCorpus {
     }
 }
 
-fn pretty_format_type(name: &str, tokens: &Tokens) -> Vec<String> {
-    let mut res = Vec::new();
-    let mut indent = 0;
+/// Processes tokens describing a type and produces its pretty-formatted version as a [`Vec`] of
+/// [`String`] lines.
+fn pretty_format_type(tokens: &Tokens) -> Vec<String> {
+    // Define a helper extension trait to allow appending a specific indentation to a string, as
+    // string.push_indent().
+    trait PushIndentExt {
+        fn push_indent(&mut self, indent: usize);
+    }
 
-    let mut line = name.to_string();
-    for token in tokens.iter() {
-        let mut newline = false;
-        match token.as_str() {
-            "{" => {
-                line.push_str(" {");
-                res.push(line);
-                line = String::new();
-                indent += 1;
-                newline = true;
-            }
-            "}" => {
-                line.push_str(" }");
-                res.push(line);
-                line = String::new();
-                indent -= 1;
-                newline = true;
-            }
-            ";" => {
-                line.push_str(" ;");
-                res.push(line);
-                line = String::new();
-                newline = true;
-            }
-            "," => {
-                line.push_str(" ,");
-                res.push(line);
-                line = String::new();
-                newline = true;
-            }
-            _ => {
-                line.push(' ');
-                line.push_str(token.as_str());
-            }
-        };
-        if newline {
+    impl PushIndentExt for String {
+        fn push_indent(&mut self, indent: usize) {
             for _ in 0..indent {
-                line.push_str("\t");
+                self.push_str("\t");
             }
         }
     }
+
+    // Iterate over all tokens and produce the formatted output.
+    let mut res = Vec::new();
+    let mut indent = 0;
+
+    let mut line = String::new();
+    for token in tokens.iter() {
+        // Handle the closing bracket early, it ends any prior line and reduces indentation.
+        match token.as_str() {
+            "}" => {
+                if !line.is_empty() {
+                    res.push(line);
+                }
+                if indent > 0 {
+                    indent -= 1;
+                }
+                line = String::new();
+            }
+            _ => {}
+        }
+
+        // Insert any newline indentation.
+        let is_first = line.is_empty();
+        if is_first {
+            line.push_indent(indent);
+        }
+
+        // Check if the token is special and append it appropriately to the output.
+        match token.as_str() {
+            "{" => {
+                if !is_first {
+                    line.push(' ');
+                }
+                line.push('{');
+                res.push(line);
+                indent += 1;
+
+                line = String::new();
+            }
+            "}" => {
+                line.push('}');
+            }
+            ";" => {
+                line.push(';');
+                res.push(line);
+
+                line = String::new();
+            }
+            "," => {
+                line.push(',');
+                res.push(line);
+
+                line = String::new();
+            }
+            _ => {
+                if !is_first {
+                    line.push(' ');
+                }
+                line.push_str(token.as_str());
+            }
+        };
+    }
+
+    if !line.is_empty() {
+        res.push(line);
+    }
+
     res
+}
+
+#[cfg(test)]
+mod pretty_format_type_tests {
+    use super::*;
+
+    #[test]
+    fn format_typedef() {
+        // Check pretty-formatting of a typedef declaration.
+        let pretty = pretty_format_type(&vec![
+            Token::new_atom("typedef"),
+            Token::new_atom("unsigned"),
+            Token::new_atom("long"),
+            Token::new_atom("long"),
+            Token::new_atom("u64"),
+        ]);
+        assert_eq!(
+            pretty,
+            crate::string_vec!(
+                "typedef unsigned long long u64" //
+            )
+        );
+    }
+
+    #[test]
+    fn format_enum() {
+        // Check pretty-formatting of an enum declaration.
+        let pretty = pretty_format_type(&vec![
+            Token::new_atom("enum"),
+            Token::new_atom("test"),
+            Token::new_atom("{"),
+            Token::new_atom("VALUE1"),
+            Token::new_atom(","),
+            Token::new_atom("VALUE2"),
+            Token::new_atom(","),
+            Token::new_atom("VALUE3"),
+            Token::new_atom("}"),
+        ]);
+        assert_eq!(
+            pretty,
+            crate::string_vec!(
+                "enum test {",
+                "\tVALUE1,",
+                "\tVALUE2,",
+                "\tVALUE3",
+                "}" //
+            )
+        );
+    }
+
+    #[test]
+    fn format_struct() {
+        // Check pretty-formatting of a struct declaration.
+        let pretty = pretty_format_type(&vec![
+            Token::new_atom("struct"),
+            Token::new_atom("test"),
+            Token::new_atom("{"),
+            Token::new_atom("int"),
+            Token::new_atom("ivalue"),
+            Token::new_atom(";"),
+            Token::new_atom("long"),
+            Token::new_atom("lvalue"),
+            Token::new_atom(";"),
+            Token::new_atom("}"),
+        ]);
+        assert_eq!(
+            pretty,
+            crate::string_vec!(
+                "struct test {",
+                "\tint ivalue;",
+                "\tlong lvalue;",
+                "}" //
+            )
+        );
+    }
+
+    #[test]
+    fn format_union() {
+        // Check pretty-formatting of a union declaration.
+        let pretty = pretty_format_type(&vec![
+            Token::new_atom("union"),
+            Token::new_atom("test"),
+            Token::new_atom("{"),
+            Token::new_atom("int"),
+            Token::new_atom("ivalue"),
+            Token::new_atom(";"),
+            Token::new_atom("long"),
+            Token::new_atom("lvalue"),
+            Token::new_atom(";"),
+            Token::new_atom("}"),
+        ]);
+        assert_eq!(
+            pretty,
+            crate::string_vec!(
+                "union test {",
+                "\tint ivalue;",
+                "\tlong lvalue;",
+                "}" //
+            )
+        );
+    }
+
+    #[test]
+    fn format_enum_constant() {
+        // Check pretty-formatting of an enum constant declaration.
+        let pretty = pretty_format_type(&vec![Token::new_atom("7")]);
+        assert_eq!(
+            pretty,
+            crate::string_vec!(
+                "7" //
+            )
+        );
+    }
+
+    #[test]
+    fn format_nested() {
+        // Check pretty-formatting of a nested declaration.
+        let pretty = pretty_format_type(&vec![
+            Token::new_atom("union"),
+            Token::new_atom("nested"),
+            Token::new_atom("{"),
+            Token::new_atom("struct"),
+            Token::new_atom("{"),
+            Token::new_atom("int"),
+            Token::new_atom("ivalue1"),
+            Token::new_atom(";"),
+            Token::new_atom("int"),
+            Token::new_atom("ivalue2"),
+            Token::new_atom(";"),
+            Token::new_atom("}"),
+            Token::new_atom(";"),
+            Token::new_atom("long"),
+            Token::new_atom("lvalue"),
+            Token::new_atom(";"),
+            Token::new_atom("}"),
+        ]);
+        assert_eq!(
+            pretty,
+            crate::string_vec!(
+                "union nested {",
+                "\tstruct {",
+                "\t\tint ivalue1;",
+                "\t\tint ivalue2;",
+                "\t};",
+                "\tlong lvalue;",
+                "}" //
+            )
+        );
+    }
+
+    #[test]
+    fn format_imbalanced() {
+        // Check pretty-formatting of a declaration with wrongly balanced brackets.
+        let pretty = pretty_format_type(&vec![
+            Token::new_atom("struct"),
+            Token::new_atom("imbalanced"),
+            Token::new_atom("{"),
+            Token::new_atom("{"),
+            Token::new_atom("}"),
+            Token::new_atom("}"),
+            Token::new_atom("}"),
+            Token::new_atom(";"),
+            Token::new_atom("{"),
+            Token::new_atom("{"),
+        ]);
+        assert_eq!(
+            pretty,
+            crate::string_vec!(
+                "struct imbalanced {",
+                "\t{",
+                "\t}",
+                "}",
+                "};",
+                "{",
+                "\t{" //
+            )
+        );
+    }
+
+    #[test]
+    fn format_typeref() {
+        // Check pretty-formatting of a declaration with a reference to another type.
+        let pretty = pretty_format_type(&vec![
+            Token::new_atom("struct"),
+            Token::new_atom("typeref"),
+            Token::new_atom("{"),
+            Token::new_typeref("s#other"),
+            Token::new_atom("other"),
+            Token::new_atom(";"),
+            Token::new_atom("}"),
+        ]);
+        assert_eq!(
+            pretty,
+            crate::string_vec!(
+                "struct typeref {",
+                "\ts#other other;",
+                "}" //
+            )
+        );
+    }
 }
 
 fn print_type_change(name: &str, tokens: &Tokens, other_tokens: &Tokens) {
     println!("{}", name);
-    let pretty = pretty_format_type(name, tokens);
-    let other_pretty = pretty_format_type(name, other_tokens);
+    let pretty = pretty_format_type(tokens);
+    let other_pretty = pretty_format_type(other_tokens);
 
     let diff_output = crate::diff::unified(&pretty, &other_pretty);
     for line in diff_output.iter() {
