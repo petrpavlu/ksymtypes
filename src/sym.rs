@@ -390,7 +390,10 @@ impl SymCorpus {
 
         for (name, variants) in changes.iter() {
             for (tokens, other_tokens) in variants {
-                print_type_change(name, tokens, other_tokens);
+                println!("{}", name);
+                for line in get_type_diff(tokens, other_tokens) {
+                    println!("{}", line);
+                }
             }
         }
     }
@@ -682,13 +685,120 @@ mod pretty_format_type_tests {
     }
 }
 
-fn print_type_change(name: &str, tokens: &Tokens, other_tokens: &Tokens) {
-    println!("{}", name);
+/// Formats a unified diff between two supposedly different types and returns them as a [`Vec`] of
+/// [`String`] lines.
+fn get_type_diff(tokens: &Tokens, other_tokens: &Tokens) -> Vec<String> {
     let pretty = pretty_format_type(tokens);
     let other_pretty = pretty_format_type(other_tokens);
+    crate::diff::unified(&pretty, &other_pretty)
+}
 
-    let diff_output = crate::diff::unified(&pretty, &other_pretty);
-    for line in diff_output.iter() {
-        println!("{}", line);
+#[cfg(test)]
+mod get_type_diff_tests {
+    use super::*;
+
+    #[test]
+    fn format_removal() {
+        let diff = get_type_diff(
+            &vec![
+                Token::new_atom("struct"),
+                Token::new_atom("test"),
+                Token::new_atom("{"),
+                Token::new_atom("int"),
+                Token::new_atom("ivalue1"),
+                Token::new_atom(";"),
+                Token::new_atom("int"),
+                Token::new_atom("ivalue2"),
+                Token::new_atom(";"),
+                Token::new_atom("}"),
+            ],
+            &vec![
+                Token::new_atom("struct"),
+                Token::new_atom("test"),
+                Token::new_atom("{"),
+                Token::new_atom("int"),
+                Token::new_atom("ivalue1"),
+                Token::new_atom(";"),
+                Token::new_atom("}"),
+            ],
+        );
+        assert_eq!(
+            diff,
+            crate::string_vec!(
+                " struct test {",
+                " \tint ivalue1;",
+                "-\tint ivalue2;",
+                " }" //
+            )
+        );
+    }
+
+    #[test]
+    fn format_addition() {
+        let diff = get_type_diff(
+            &vec![
+                Token::new_atom("struct"),
+                Token::new_atom("test"),
+                Token::new_atom("{"),
+                Token::new_atom("int"),
+                Token::new_atom("ivalue1"),
+                Token::new_atom(";"),
+                Token::new_atom("}"),
+            ],
+            &vec![
+                Token::new_atom("struct"),
+                Token::new_atom("test"),
+                Token::new_atom("{"),
+                Token::new_atom("int"),
+                Token::new_atom("ivalue1"),
+                Token::new_atom(";"),
+                Token::new_atom("int"),
+                Token::new_atom("ivalue2"),
+                Token::new_atom(";"),
+                Token::new_atom("}"),
+            ],
+        );
+        assert_eq!(
+            diff,
+            crate::string_vec!(
+                " struct test {",
+                " \tint ivalue1;",
+                "+\tint ivalue2;",
+                " }" //
+            )
+        );
+    }
+
+    #[test]
+    fn format_modification() {
+        let diff = get_type_diff(
+            &vec![
+                Token::new_atom("struct"),
+                Token::new_atom("test"),
+                Token::new_atom("{"),
+                Token::new_atom("int"),
+                Token::new_atom("ivalue1"),
+                Token::new_atom(";"),
+                Token::new_atom("}"),
+            ],
+            &vec![
+                Token::new_atom("struct"),
+                Token::new_atom("test"),
+                Token::new_atom("{"),
+                Token::new_atom("int"),
+                Token::new_atom("ivalue2"),
+                Token::new_atom(";"),
+                Token::new_atom("}"),
+            ],
+        );
+        assert_eq!(
+            diff,
+            crate::string_vec!(
+                " struct test {",
+                "-\tint ivalue1;",
+                "+\tint ivalue2;",
+                " }" //
+            )
+        );
     }
 }
