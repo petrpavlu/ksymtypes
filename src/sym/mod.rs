@@ -413,10 +413,10 @@ impl SymCorpus {
         processed.insert(name.to_string());
 
         match file.records.get(name) {
-            Some(variant_idx) => match self.types.get(name) {
+            Some(&variant_idx) => match self.types.get(name) {
                 Some(variants) => {
-                    let tokens = &variants[*variant_idx];
-                    for token in tokens.iter() {
+                    let tokens = &variants[variant_idx];
+                    for token in tokens {
                         match token {
                             Token::TypeRef(ref_name) => {
                                 self.print_file_type(file, ref_name, processed);
@@ -426,7 +426,7 @@ impl SymCorpus {
                     }
 
                     print!("{}", name);
-                    for token in tokens.iter() {
+                    for token in tokens {
                         match token {
                             Token::TypeRef(ref_name) => {
                                 print!(" {}", ref_name);
@@ -449,7 +449,7 @@ impl SymCorpus {
     }
 
     pub fn print_type(&self, name: &str) {
-        for file in self.files.iter() {
+        for file in &self.files {
             match file.records.get(name) {
                 Some(_variant_idx) => {
                     println!("Found type {} in {}:", name, file.path.display());
@@ -463,8 +463,8 @@ impl SymCorpus {
 
     fn get_type_tokens<'a>(symtypes: &'a SymCorpus, file: &SymFile, name: &str) -> &'a Tokens {
         match file.records.get(name) {
-            Some(variant_idx) => match symtypes.types.get(name) {
-                Some(variants) => &variants[*variant_idx],
+            Some(&variant_idx) => match symtypes.types.get(name) {
+                Some(variants) => &variants[variant_idx],
                 None => {
                     panic!("Type {} has a missing declaration", name);
                 }
@@ -483,7 +483,7 @@ impl SymCorpus {
     ) {
         match changes.get_mut(name) {
             Some(variants) => {
-                for (tokens2, other_tokens2) in variants.iter() {
+                for (tokens2, other_tokens2) in &*variants {
                     if Self::are_tokens_eq(tokens, tokens2)
                         && Self::are_tokens_eq(other_tokens, other_tokens2)
                     {
@@ -553,7 +553,7 @@ impl SymCorpus {
     pub fn compare_with(&self, other: &SymCorpus) {
         let mut changes = TypeChanges::new();
 
-        for (name, file_idx) in self.exports.iter() {
+        for (name, file_idx) in &self.exports {
             let file = &self.files[*file_idx];
             match other.exports.get(name) {
                 Some(other_file_idx) => {
@@ -568,7 +568,7 @@ impl SymCorpus {
         }
 
         // Check for symbols in B and not in A.
-        for (other_name, _other_file_idx) in other.exports.iter() {
+        for (other_name, _other_file_idx) in &other.exports {
             match self.exports.get(other_name) {
                 Some(_file_idx) => {}
                 None => {
@@ -577,7 +577,7 @@ impl SymCorpus {
             }
         }
 
-        for (name, variants) in changes.iter() {
+        for (name, variants) in changes {
             for (tokens, other_tokens) in variants {
                 println!("{}", name);
                 for line in get_type_diff(tokens, other_tokens) {
@@ -610,7 +610,7 @@ fn pretty_format_type(tokens: &Tokens) -> Vec<String> {
     let mut indent = 0;
 
     let mut line = String::new();
-    for token in tokens.iter() {
+    for token in tokens {
         // Handle the closing bracket early, it ends any prior line and reduces indentation.
         match token.as_str() {
             "}" => {
