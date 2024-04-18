@@ -165,13 +165,8 @@ impl SymCorpus {
             records.insert(name.to_string(), index);
 
             // TODO Check for duplicates.
-            match name.chars().nth(1) {
-                Some(ch) => {
-                    if ch != '#' {
-                        self.exports.insert(name.to_string(), self.files.len());
-                    }
-                }
-                None => {}
+            if Self::is_export(name) {
+                self.exports.insert(name.to_string(), self.files.len());
             }
         }
 
@@ -216,6 +211,13 @@ impl SymCorpus {
             };
         }
         return true;
+    }
+
+    fn is_export(name: &str) -> bool {
+        match name.chars().nth(1) {
+            Some(ch) => ch != '#',
+            None => true,
+        }
     }
 
     // TODO
