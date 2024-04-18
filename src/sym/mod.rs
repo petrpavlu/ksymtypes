@@ -173,6 +173,7 @@ impl SymCorpus {
 
         // TODO Validate all references?
 
+        // TODO Drop the root prefix.
         let symfile = SymFile {
             path: path.to_path_buf(),
             records: records,
@@ -481,6 +482,7 @@ impl SymCorpus {
         other_tokens: &'a Tokens,
         changes: &mut TypeChanges<'a>,
     ) {
+        // TODO Rewrite using .entry().
         match changes.get_mut(name) {
             Some(variants) => {
                 for (tokens2, other_tokens2) in &*variants {

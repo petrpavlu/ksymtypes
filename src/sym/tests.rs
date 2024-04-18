@@ -200,6 +200,7 @@ fn format_typeref() {
 
 #[test]
 fn format_removal() {
+    // TODO Add test description.
     let diff = get_type_diff(
         &vec![
             Token::new_atom("struct"),
@@ -236,6 +237,7 @@ fn format_removal() {
 
 #[test]
 fn format_addition() {
+    // TODO Add test description.
     let diff = get_type_diff(
         &vec![
             Token::new_atom("struct"),
@@ -272,6 +274,7 @@ fn format_addition() {
 
 #[test]
 fn format_modification() {
+    // TODO Add test description.
     let diff = get_type_diff(
         &vec![
             Token::new_atom("struct"),
