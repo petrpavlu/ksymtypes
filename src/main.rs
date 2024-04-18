@@ -12,10 +12,26 @@ fn print_usage(program: &str) {
             "Usage: {} [OPTIONS] COMMAND\n",
             "\n",
             "OPTIONS\n",
-            "  -h, --help   print this help\n",
+            "  -h, --help            print this help\n",
             "\n",
             "COMMAND\n",
-            "  compare      show differences between two symtypes corpuses\n",
+            "  consolidate           consolidate symtypes into a single file\n",
+            "  compare               show differences between two symtypes corpuses\n",
+        ),
+        program
+    );
+}
+
+/// Prints the usage message for the `consolidate` command on `stdout`.
+fn print_consolidate_usage(program: &str) {
+    print!(
+        concat!(
+            "Usage: {} consolidate [OPTIONS] DIR\n",
+            "Consolidate symtypes into a single file.\n",
+            "\n",
+            "OPTIONS\n",
+            "  -h, --help            print this help\n",
+            "  -o, --output=FILE     write the result in a specified file, instead of stdout\n",
         ),
         program
     );
@@ -29,10 +45,72 @@ fn print_compare_usage(program: &str) {
             "Show differences between two symtypes corpuses.\n",
             "\n",
             "OPTIONS\n",
-            "  -h, --help   print this help\n",
+            "  -h, --help            print this help\n",
         ),
         program
     );
+}
+
+/// Handles the `consolidate` command which consolidates symtypes into a single file.
+fn do_consolidate<I>(program: &str, args: I) -> Result<(), ()>
+where
+    I: IntoIterator<Item = String>,
+{
+    // Parse specific command options.
+    let mut output = "-".to_string();
+    let mut maybe_dir = None;
+    for arg in args.into_iter() {
+        if arg == "-h" || arg == "--help" {
+            print_consolidate_usage(&program);
+            return Ok(());
+        }
+        if arg == "-o" || arg == "--output" {
+            // TODO Implement correctly.
+            output = arg.to_string();
+            continue;
+        }
+        if arg.starts_with("-") || arg.starts_with("--") {
+            eprintln!("Unrecognized consolidate option '{}'", arg);
+            return Err(());
+        }
+        if maybe_dir.is_none() {
+            maybe_dir = Some(arg);
+            continue;
+        }
+        eprintln!("Excess consolidate argument '{}' specified", arg);
+        return Err(());
+    }
+
+    let dir = match maybe_dir {
+        Some(dir) => dir,
+        None => {
+            eprintln!("The consolidate source is missing");
+            return Err(());
+        }
+    };
+
+    // Do the comparison.
+    debug!("Consolidate '{}' to '{}'", dir, output);
+
+    let syms = match SymCorpus::new(dir.as_str()) {
+        Ok(syms) => syms,
+        Err(err) => {
+            eprintln!("Failed to read symtypes from '{}': {}", dir, err);
+            return Err(());
+        }
+    };
+    match syms.write_consolidated(&output) {
+        Ok(_) => {}
+        Err(err) => {
+            eprintln!(
+                "Failed to write consolidated symtypes to '{}': {}",
+                output, err
+            );
+            return Err(());
+        }
+    }
+
+    Ok(())
 }
 
 /// Handles the `compare` command which shows differences between two symtypes corpuses.
@@ -144,6 +222,11 @@ fn main() {
 
     /* Process the specified command. */
     match command.as_str() {
+        "consolidate" => {
+            if let Err(_) = do_consolidate(&program, args) {
+                process::exit(1);
+            }
+        }
         "compare" => {
             if let Err(_) = do_compare(&program, args) {
                 process::exit(1);
