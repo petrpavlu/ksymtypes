@@ -124,7 +124,8 @@ impl SymCorpus {
 
     /// Loads symtypes data from a specified reader.
     pub fn read_single<R>(&mut self, path: &Path, reader: R) -> Result<(), crate::Error>
-        where R: io::Read,
+    where
+        R: io::Read,
     {
         debug!("Loading {}", path.display());
 
@@ -319,7 +320,9 @@ impl SymCorpus {
     }
 
     pub fn write_consolidated<W>(&self, writer: W) -> Result<(), crate::Error>
-        where W: io::Write {
+    where
+        W: io::Write,
+    {
         let mut writer = BufWriter::new(writer);
 
         // Initialize output data. Variable output_types records all output symbols, file_types
@@ -365,8 +368,7 @@ impl SymCorpus {
 
         // Sort all output types and write them to the specified file.
         let mut sorted_records = output_types.into_iter().collect::<Vec<_>>();
-        sorted_records
-            .sort_by_key(|(name, _remap)| (Self::is_export(name), *name));
+        sorted_records.sort_by_key(|(name, _remap)| (Self::is_export(name), *name));
 
         for (name, remap) in sorted_records {
             let variants = self.types.get(name).unwrap();

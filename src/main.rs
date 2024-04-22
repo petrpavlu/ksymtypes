@@ -3,8 +3,8 @@
 
 use ksyms::sym::SymCorpus;
 use log::debug;
-use std::{env, process};
 use std::path::Path;
+use std::{env, process};
 
 /// Prints the global usage message on `stdout`.
 fn print_usage(program: &str) {
@@ -95,7 +95,7 @@ where
 
     let mut syms = SymCorpus::new();
     match syms.load_dir(&Path::new(&dir)) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(err) => {
             eprintln!("Failed to read symtypes from '{}': {}", dir, err);
             return Err(());
@@ -164,7 +164,7 @@ where
 
     let mut s1 = SymCorpus::new();
     match s1.load_dir(&Path::new(&dir1)) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(err) => {
             eprintln!("Failed to read symtypes from '{}': {}", dir1, err);
             return Err(());
@@ -172,7 +172,7 @@ where
     };
     let mut s2 = SymCorpus::new();
     match s2.load_dir(&Path::new(&dir2)) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(err) => {
             eprintln!("Failed to read symtypes from '{}': {}", dir2, err);
             return Err(());
