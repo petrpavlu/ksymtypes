@@ -298,7 +298,7 @@ impl SymCorpus {
     }
 
     /// Writes the corpus in the consolidated form into a specified file.
-    pub fn write_consolidated(&self, filename: &str) -> Result<(), crate::Error> {
+    pub fn write_consolidated_file(&self, filename: &str) -> Result<(), crate::Error> {
         // Open the output file.
         let path = Path::new(filename);
         let file: Box<dyn Write> = if filename == "-" {
@@ -314,7 +314,13 @@ impl SymCorpus {
                 }
             }
         };
-        let mut writer = BufWriter::new(file);
+
+        self.write_consolidated(file)
+    }
+
+    pub fn write_consolidated<W>(&self, writer: W) -> Result<(), crate::Error>
+        where W: io::Write {
+        let mut writer = BufWriter::new(writer);
 
         // Initialize output data. Variable output_types records all output symbols, file_types
         // provides per-file information.

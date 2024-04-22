@@ -101,7 +101,7 @@ where
             return Err(());
         }
     };
-    match syms.write_consolidated(&output) {
+    match syms.write_consolidated_file(&output) {
         Ok(_) => {}
         Err(err) => {
             eprintln!(
