@@ -59,18 +59,16 @@ pub struct SymCorpus {
 type TypeChanges<'a> = HashMap<&'a str, Vec<(&'a Tokens, &'a Tokens)>>;
 
 impl SymCorpus {
-    pub fn new(dir: &str) -> Result<Self, crate::Error> {
-        let mut symtypes = Self {
+    pub fn new() -> Self {
+        Self {
             types: Types::new(),
             exports: Exports::new(),
             files: SymFiles::new(),
-        };
-        symtypes.load_dir(&Path::new(dir))?;
-        Ok(symtypes)
+        }
     }
 
     /// Loads symtypes in a specified directory, recursively.
-    fn load_dir(&mut self, path: &Path) -> Result<(), crate::Error> {
+    pub fn load_dir(&mut self, path: &Path) -> Result<(), crate::Error> {
         // TODO Report errors and skip directories?
         let dir_iter = match fs::read_dir(path) {
             Ok(dir_iter) => dir_iter,
@@ -103,16 +101,14 @@ impl SymCorpus {
                 None => continue,
             };
             if ext == "symtypes" {
-                self.load_file(&entry_path)?;
+                self.read_single_file(&entry_path)?;
             }
         }
         Ok(())
     }
 
     /// Loads symtypes data from a specified file.
-    fn load_file(&mut self, path: &Path) -> Result<(), crate::Error> {
-        debug!("Loading {}", path.display());
-
+    pub fn read_single_file(&mut self, path: &Path) -> Result<(), crate::Error> {
         let file = match File::open(path) {
             Ok(file) => file,
             Err(err) => {
@@ -122,9 +118,18 @@ impl SymCorpus {
                 ))
             }
         };
-        let reader = BufReader::new(file);
+
+        self.read_single(path, file)
+    }
+
+    /// Loads symtypes data from a specified reader.
+    pub fn read_single<R>(&mut self, path: &Path, reader: R) -> Result<(), crate::Error>
+        where R: io::Read,
+    {
+        debug!("Loading {}", path.display());
 
         // Read all declarations.
+        let reader = BufReader::new(reader);
         let mut records = FileRecords::new();
 
         for maybe_line in reader.lines() {

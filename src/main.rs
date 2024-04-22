@@ -4,6 +4,7 @@
 use ksyms::sym::SymCorpus;
 use log::debug;
 use std::{env, process};
+use std::path::Path;
 
 /// Prints the global usage message on `stdout`.
 fn print_usage(program: &str) {
@@ -92,8 +93,9 @@ where
     // Do the comparison.
     debug!("Consolidate '{}' to '{}'", dir, output);
 
-    let syms = match SymCorpus::new(dir.as_str()) {
-        Ok(syms) => syms,
+    let mut syms = SymCorpus::new();
+    match syms.load_dir(&Path::new(&dir)) {
+        Ok(_) => {},
         Err(err) => {
             eprintln!("Failed to read symtypes from '{}': {}", dir, err);
             return Err(());
@@ -160,15 +162,17 @@ where
     // Do the comparison.
     debug!("Compare '{}' and '{}'", dir1, dir2);
 
-    let s1 = match SymCorpus::new(dir1.as_str()) {
-        Ok(s1) => s1,
+    let mut s1 = SymCorpus::new();
+    match s1.load_dir(&Path::new(&dir1)) {
+        Ok(_) => {},
         Err(err) => {
             eprintln!("Failed to read symtypes from '{}': {}", dir1, err);
             return Err(());
         }
     };
-    let s2 = match SymCorpus::new(dir2.as_str()) {
-        Ok(s2) => s2,
+    let mut s2 = SymCorpus::new();
+    match s2.load_dir(&Path::new(&dir2)) {
+        Ok(_) => {},
         Err(err) => {
             eprintln!("Failed to read symtypes from '{}': {}", dir2, err);
             return Err(());
