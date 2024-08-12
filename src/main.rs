@@ -121,8 +121,8 @@ where
     I: IntoIterator<Item = String>,
 {
     // Parse specific command options.
-    let mut maybe_dir1 = None;
-    let mut maybe_dir2 = None;
+    let mut maybe_path1 = None;
+    let mut maybe_path2 = None;
     for arg in args.into_iter() {
         if arg == "-h" || arg == "--help" {
             print_compare_usage(&program);
@@ -132,27 +132,27 @@ where
             eprintln!("Unrecognized compare option '{}'", arg);
             return Err(());
         }
-        if maybe_dir1.is_none() {
-            maybe_dir1 = Some(arg);
+        if maybe_path1.is_none() {
+            maybe_path1 = Some(arg);
             continue;
         }
-        if maybe_dir2.is_none() {
-            maybe_dir2 = Some(arg);
+        if maybe_path2.is_none() {
+            maybe_path2 = Some(arg);
             continue;
         }
         eprintln!("Excess compare argument '{}' specified", arg);
         return Err(());
     }
 
-    let dir1 = match maybe_dir1 {
-        Some(dir1) => dir1,
+    let path1 = match maybe_path1 {
+        Some(path1) => path1,
         None => {
             eprintln!("The first compare source is missing");
             return Err(());
         }
     };
-    let dir2 = match maybe_dir2 {
-        Some(dir2) => dir2,
+    let path2 = match maybe_path2 {
+        Some(path2) => path2,
         None => {
             eprintln!("The second compare source is missing");
             return Err(());
@@ -160,21 +160,21 @@ where
     };
 
     // Do the comparison.
-    debug!("Compare '{}' and '{}'", dir1, dir2);
+    debug!("Compare '{}' and '{}'", path1, path2);
 
     let mut s1 = SymCorpus::new();
-    match s1.load_dir(&Path::new(&dir1)) {
+    match s1.load(&Path::new(&path1)) {
         Ok(_) => {}
         Err(err) => {
-            eprintln!("Failed to read symtypes from '{}': {}", dir1, err);
+            eprintln!("Failed to read symtypes from '{}': {}", path1, err);
             return Err(());
         }
     };
     let mut s2 = SymCorpus::new();
-    match s2.load_dir(&Path::new(&dir2)) {
+    match s2.load(&Path::new(&path2)) {
         Ok(_) => {}
         Err(err) => {
-            eprintln!("Failed to read symtypes from '{}': {}", dir2, err);
+            eprintln!("Failed to read symtypes from '{}': {}", path2, err);
             return Err(());
         }
     };

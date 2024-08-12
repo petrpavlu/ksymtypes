@@ -68,6 +68,26 @@ impl SymCorpus {
         }
     }
 
+    // TODO Describe.
+    pub fn load(&mut self, path: &Path) -> Result<(), crate::Error> {
+        // Determine if the input is a directory tree or a single symtypes file.
+        let md = match fs::metadata(path) {
+            Ok(md) => md,
+            Err(err) => {
+                return Err(crate::Error::new_io(
+                    &format!("Failed to query path '{}'", path.display()),
+                    err,
+                ))
+            }
+        };
+
+        if md.is_dir() {
+            return self.load_dir(path);
+        } else {
+            return self.read_single_file(path);
+        }
+    }
+
     /// Loads symtypes in a specified directory, recursively.
     pub fn load_dir(&mut self, path: &Path) -> Result<(), crate::Error> {
         // TODO Report errors and skip directories?
@@ -133,10 +153,13 @@ impl SymCorpus {
         // Read all declarations.
         let reader = BufReader::new(reader);
         let mut records = FileRecords::new();
+        let mut remap = HashMap::new();
 
+        // Read the file and split its content into a lines vector.
+        let mut lines = Vec::new();
         for maybe_line in reader.lines() {
-            let line = match maybe_line {
-                Ok(line) => line,
+            match maybe_line {
+                Ok(line) => lines.push(line),
                 Err(err) => {
                     return Err(crate::Error::new_io(
                         &format!("Failed to read data from file '{}'", path.display()),
@@ -144,9 +167,31 @@ impl SymCorpus {
                     ))
                 }
             };
+        }
+
+        // Detect whether the input is a single or consolidated symtypes file.
+        let mut is_consolidated = false;
+        for line in &lines {
+            if line.starts_with("F#") {
+                is_consolidated = true;
+                break;
+            }
+        }
+
+        // Parse all declarations.
+        let mut file_indices = Vec::new();
+        for (i, line) in lines.iter().enumerate() {
+            // Check for a file declaration and remember its index. The file declarations are
+            // processed later after remapping of all symbol variants is known.
+            if line.starts_with("F#") {
+                file_indices.push(i);
+                continue;
+            }
+
+            // Handle a type/export record.
             let mut words = line.split_ascii_whitespace();
 
-            let name = match words.next() {
+            let mut name = match words.next() {
                 Some(word) => word,
                 None => continue, // TODO
             };
@@ -169,23 +214,108 @@ impl SymCorpus {
                 });
             }
 
-            let index = self.merge_type(name, tokens);
-            records.insert(name.to_string(), index);
+            // Parse the variant name/index which is appended as a suffix after the `@` character.
+            let orig_variant_name;
+            match name.rfind('@') {
+                Some(i) => {
+                    orig_variant_name = &name[i + 1..];
+                    name = &name[..i];
+                }
+                None => {
+                    orig_variant_name = "";
+                }
+            }
 
-            // TODO Check for duplicates.
-            if Self::is_export(name) {
-                self.exports.insert(name.to_string(), self.files.len());
+            // Insert the type into the corpus.
+            let variant_idx = self.merge_type(name, tokens);
+
+            // Record a mapping from the original variant name/index to the new one.
+            if is_consolidated {
+                remap
+                    .entry(name.to_string())
+                    .or_insert_with(|| HashMap::new())
+                    .insert(orig_variant_name.to_string(), variant_idx);
+            } else {
+                // TODO What if a @variant suffix is found in non-consolidated file?
+                records.insert(name.to_string(), variant_idx);
+
+                // TODO Check for duplicates.
+                if Self::is_export(name) {
+                    self.exports.insert(name.to_string(), self.files.len());
+                }
             }
         }
 
         // TODO Validate all references?
 
-        // TODO Drop the root prefix.
-        let symfile = SymFile {
-            path: path.to_path_buf(),
-            records: records,
-        };
-        self.files.push(symfile);
+        if is_consolidated {
+            // Handle file declarations.
+            for i in file_indices {
+                let mut words = lines[i].split_ascii_whitespace();
+
+                let record_name = words.next().unwrap();
+                assert!(record_name.starts_with("F#"));
+                let file_name = &record_name[2..];
+
+                let mut records = FileRecords::new();
+                for mut type_name in words {
+                    // Parse the variant name/index.
+                    let orig_variant_name;
+                    match type_name.rfind('@') {
+                        Some(i) => {
+                            orig_variant_name = &type_name[i + 1..];
+                            type_name = &type_name[..i];
+                        }
+                        None => {
+                            orig_variant_name = "";
+                        }
+                    }
+
+                    // Look up how the variant got remapped.
+                    // TODO De-duplicate error messages.
+                    let variant_idx = match remap.get(type_name) {
+                        Some(hash) => match hash.get(orig_variant_name) {
+                            Some(&variant_idx) => variant_idx,
+                            None => {
+                                return Err(crate::Error::new_parse(&format!(
+                                    "Type {}@{} is not known in file {}",
+                                    type_name,
+                                    orig_variant_name,
+                                    path.display(),
+                                )))
+                            }
+                        },
+                        None => {
+                            return Err(crate::Error::new_parse(&format!(
+                                "Type {}@{} is not known in file {}",
+                                type_name,
+                                orig_variant_name,
+                                path.display(),
+                            )))
+                        }
+                    };
+                    records.insert(type_name.to_string(), variant_idx);
+
+                    // TODO Check for duplicates.
+                    if Self::is_export(type_name) {
+                        self.exports.insert(type_name.to_string(), self.files.len());
+                    }
+                }
+
+                let symfile = SymFile {
+                    path: Path::new(file_name).to_path_buf(),
+                    records: records,
+                };
+                self.files.push(symfile);
+            }
+        } else {
+            // TODO Drop the root prefix.
+            let symfile = SymFile {
+                path: path.to_path_buf(),
+                records: records,
+            };
+            self.files.push(symfile);
+        }
 
         Ok(())
     }
