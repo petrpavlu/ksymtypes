@@ -197,7 +197,7 @@ fn main() {
         }
     };
 
-    /* Handle global options and stop at the command. */
+    // Handle global options and stop at the command.
     let mut maybe_command = None;
     loop {
         let arg = match args.next() {
@@ -225,7 +225,7 @@ fn main() {
         }
     };
 
-    /* Process the specified command. */
+    // Process the specified command.
     match command.as_str() {
         "consolidate" => {
             if let Err(_) = do_consolidate(&program, args) {
