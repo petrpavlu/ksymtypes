@@ -59,6 +59,7 @@ where
 {
     // Parse specific command options.
     let mut output = "-".to_string();
+    // TODO dir -> path for consistency with compare.
     let mut maybe_dir = None;
     for arg in args.into_iter() {
         if arg == "-h" || arg == "--help" {

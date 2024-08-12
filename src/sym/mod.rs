@@ -144,6 +144,7 @@ impl SymCorpus {
     }
 
     /// Loads symtypes data from a specified reader.
+    // TODO Write better description.
     pub fn read_single<R>(&mut self, path: &Path, reader: R) -> Result<(), crate::Error>
     where
         R: io::Read,
@@ -151,6 +152,7 @@ impl SymCorpus {
         debug!("Loading {}", path.display());
 
         // Read all declarations.
+        // TODO Describe the types.
         let reader = BufReader::new(reader);
         let mut records = FileRecords::new();
         let mut remap = HashMap::new();
@@ -321,6 +323,7 @@ impl SymCorpus {
     }
 
     fn merge_type(&mut self, name: &str, tokens: Tokens) -> usize {
+        // TODO Use .entry()?
         match self.types.get_mut(name) {
             Some(variants) => {
                 for (i, variant) in variants.iter().enumerate() {
