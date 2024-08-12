@@ -4,6 +4,7 @@
 use ksyms::sym::SymCorpus;
 use log::debug;
 use std::path::Path;
+use std::time::Instant;
 use std::{env, process};
 
 /// Prints the global usage message on `stdout`.
@@ -53,7 +54,7 @@ fn print_compare_usage(program: &str) {
 }
 
 /// Handles the `consolidate` command which consolidates symtypes into a single file.
-fn do_consolidate<I>(program: &str, args: I) -> Result<(), ()>
+fn do_consolidate<I>(program: &str, timing: bool, args: I) -> Result<(), ()>
 where
     I: IntoIterator<Item = String>,
 {
@@ -117,7 +118,7 @@ where
 }
 
 /// Handles the `compare` command which shows differences between two symtypes corpuses.
-fn do_compare<I>(program: &str, args: I) -> Result<(), ()>
+fn do_compare<I>(program: &str, timing: bool, args: I) -> Result<(), ()>
 where
     I: IntoIterator<Item = String>,
 {
@@ -163,6 +164,10 @@ where
     // Do the comparison.
     debug!("Compare '{}' and '{}'", path1, path2);
 
+    let mut now = None;
+    if timing {
+        now = Some(Instant::now());
+    }
     let mut s1 = SymCorpus::new();
     match s1.load(&Path::new(&path1)) {
         Ok(_) => {}
@@ -171,6 +176,17 @@ where
             return Err(());
         }
     };
+    if timing {
+        println!(
+            "Reading symtypes from '{}' took {:.3?}",
+            path1,
+            now.unwrap().elapsed()
+        );
+    }
+
+    if timing {
+        now = Some(Instant::now());
+    }
     let mut s2 = SymCorpus::new();
     match s2.load(&Path::new(&path2)) {
         Ok(_) => {}
@@ -179,7 +195,21 @@ where
             return Err(());
         }
     };
+    if timing {
+        println!(
+            "Reading symtypes from '{}' took {:.3?}",
+            path2,
+            now.unwrap().elapsed()
+        );
+    }
+
+    if timing {
+        now = Some(Instant::now());
+    }
     s1.compare_with(&s2);
+    if timing {
+        println!("Comparison took {:.3?}", now.unwrap().elapsed());
+    }
 
     Ok(())
 }
@@ -199,6 +229,7 @@ fn main() {
 
     // Handle global options and stop at the command.
     let mut maybe_command = None;
+    let mut timing = false;
     loop {
         let arg = match args.next() {
             Some(arg) => arg,
@@ -208,6 +239,10 @@ fn main() {
         if arg == "-h" || arg == "--help" {
             print_usage(&program);
             process::exit(0);
+        }
+        if arg == "--timing" {
+            timing = true;
+            continue;
         }
         if arg.starts_with("-") || arg.starts_with("--") {
             eprintln!("Unrecognized global option '{}'", arg);
@@ -228,12 +263,12 @@ fn main() {
     // Process the specified command.
     match command.as_str() {
         "consolidate" => {
-            if let Err(_) = do_consolidate(&program, args) {
+            if let Err(_) = do_consolidate(&program, timing, args) {
                 process::exit(1);
             }
         }
         "compare" => {
-            if let Err(_) = do_compare(&program, args) {
+            if let Err(_) = do_compare(&program, timing, args) {
                 process::exit(1);
             }
         }
