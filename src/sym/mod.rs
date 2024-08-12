@@ -39,7 +39,8 @@ impl Token {
 }
 
 type Tokens = Vec<Token>;
-type Types = HashMap<String, Vec<Tokens>>;
+type TypeVariants = Vec<Tokens>;
+type Types = HashMap<String, TypeVariants>;
 type Exports = HashMap<String, usize>;
 type FileRecords = HashMap<String, usize>;
 
