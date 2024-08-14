@@ -8,7 +8,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{prelude::*, BufReader, BufWriter};
 use std::path::{Path, PathBuf};
-use std::{fs, io};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
+use std::{fs, io, thread};
 
 #[cfg(test)]
 mod tests;
@@ -627,8 +629,9 @@ impl SymCorpus {
         name: &'a str,
         tokens: &'a Tokens,
         other_tokens: &'a Tokens,
-        changes: &mut TypeChanges<'a>,
+        changes: &Mutex<TypeChanges<'a>>,
     ) {
+        let mut changes = changes.lock().unwrap();
         // TODO Rewrite using .entry().
         match changes.get_mut(name) {
             Some(variants) => {
@@ -656,7 +659,7 @@ impl SymCorpus {
         other_file: &SymFile,
         name: &'a str,
         processed: &mut HashSet<String>,
-        changes: &mut TypeChanges<'a>,
+        changes: &Mutex<TypeChanges<'a>>,
     ) {
         match processed.get(name) {
             Some(_) => return,
@@ -700,21 +703,44 @@ impl SymCorpus {
     }
 
     pub fn compare_with(&self, other: &SymCorpus) {
-        let mut changes = TypeChanges::new();
+        // TODO Make configurable.
+        let num_workers = 8;
 
-        for (name, file_idx) in &self.exports {
-            let file = &self.files[*file_idx];
-            match other.exports.get(name) {
-                Some(other_file_idx) => {
-                    let other_file = &other.files[*other_file_idx];
-                    let mut processed = HashSet::new();
-                    self.compare_types(other, file, other_file, name, &mut processed, &mut changes);
-                }
-                None => {
-                    println!("Export {} is present in A but not in B", name);
-                }
+        let works: Vec<_> = self.exports.iter().collect();
+        let next_work_idx = AtomicUsize::new(0);
+
+        let changes = Mutex::new(TypeChanges::new());
+
+        thread::scope(|s| {
+            for _ in 0..num_workers {
+                s.spawn(|| loop {
+                    let work_idx = next_work_idx.fetch_add(1, Ordering::Relaxed);
+                    if work_idx >= works.len() {
+                        break;
+                    }
+                    let (name, file_idx) = works[work_idx];
+
+                    let file = &self.files[*file_idx];
+                    match other.exports.get(name) {
+                        Some(other_file_idx) => {
+                            let other_file = &other.files[*other_file_idx];
+                            let mut processed = HashSet::new();
+                            self.compare_types(
+                                other,
+                                file,
+                                other_file,
+                                name,
+                                &mut processed,
+                                &changes,
+                            );
+                        }
+                        None => {
+                            println!("Export {} is present in A but not in B", name);
+                        }
+                    }
+                });
             }
-        }
+        });
 
         // Check for symbols in B and not in A.
         for (other_name, _other_file_idx) in &other.exports {
@@ -726,6 +752,7 @@ impl SymCorpus {
             }
         }
 
+        let changes = changes.into_inner().unwrap();
         for (name, variants) in changes {
             for (tokens, other_tokens) in variants {
                 println!("{}", name);
