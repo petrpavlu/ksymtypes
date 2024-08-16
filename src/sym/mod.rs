@@ -306,6 +306,23 @@ impl SymCorpus {
                     }
                 }
 
+                // Add implicit references, ones that were omitted by the F# declaration because
+                // only one variant exists in the entire consolidated file.
+                let walk_records: Vec<_> = records
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+                for (name, variant_idx) in walk_records {
+                    self.extrapolate_file_record(
+                        path,
+                        file_name,
+                        &name,
+                        variant_idx,
+                        true,
+                        &mut records,
+                    );
+                }
+
                 let symfile = SymFile {
                     path: Path::new(file_name).to_path_buf(),
                     records: records,
@@ -343,6 +360,86 @@ impl SymCorpus {
                 return 0;
             }
         }
+    }
+
+    /// Processes a single symbol in some file originated from an `F#` record and enhances the
+    /// specified file records with the needed implicit types.
+    ///
+    /// This function is used when reading a consolidated input file and processing its `F#`
+    /// records. Each `F#` record is in form `F#<filename> <type@variant>... <export>...`. It lists
+    /// all types and exports in a given file but is allowed to omit any referenced types which have
+    /// only one variant in the whole consolidated file. The purpose of this function is to find all
+    /// such implicit references and add them to `records`.
+    ///
+    /// A caller of this function should pre-fill `records` with all explicit references given on
+    /// the processed `F#` record and then call this function on each of the references. These root
+    /// calls should be invoked with `is_explicit` set to `true`. The function then recursively adds
+    /// all needed implicit types which are referenced from these roots.
+    fn extrapolate_file_record(
+        &self,
+        corpus_path: &Path,
+        file_name: &str,
+        name: &str,
+        variant_idx: usize,
+        is_explicit: bool,
+        records: &mut FileRecords,
+    ) -> Result<(), crate::Error> {
+        if is_explicit {
+            // All explicit symbols need to be added by the caller.
+            assert!(records.get(name).is_some());
+        } else {
+            // A symbol can be implicit only if it has one variant.
+            assert!(variant_idx == 0);
+
+            // See if the symbol was already processed.
+            //
+            // Unfortunately, HashMap in stable Rust doesn't offer to do a lookup using &str but
+            // insert the key as String if it is missing. The code opts to run the lookup again
+            // if the key is missing and the key+value pair needs inserting.
+            // https://stackoverflow.com/questions/51542024/how-do-i-use-the-entry-api-with-an-expensive-key-that-is-only-constructed-if-the
+            if records.get(name).is_some() {
+                return Ok(());
+            }
+            records.insert(name.to_string(), variant_idx);
+        }
+
+        // Obtain tokens for the selected variant and check it is correctly specified.
+        let variants = self.types.get(name).unwrap();
+        assert!(variants.len() > 0);
+        if !is_explicit && variants.len() > 1 {
+            return Err(crate::Error::new_parse(&format!(
+                "Type '{}' is implicitly referenced by file '{}' but has multiple variants in corpus '{}'",
+                name,
+                file_name,
+                corpus_path.display(),
+            )));
+        }
+        let tokens = &variants[variant_idx];
+
+        // Process recursively all types referenced by this symbol.
+        for token in tokens {
+            match token {
+                Token::TypeRef(ref_name) => {
+                    // Process the type. Note that passing variant_idx=0 is ok here:
+                    // * If the type is explicitly specified in the parent F# record then it must be
+                    //   already added in the records and the called function immediately returns.
+                    // * If the type is implicit then it can have only one variant and so only
+                    //   variant_idx=0 can be correct. The invoked function will check that no more
+                    //   than one variant is actually present.
+                    self.extrapolate_file_record(
+                        corpus_path,
+                        file_name,
+                        ref_name,
+                        0,
+                        false,
+                        records,
+                    );
+                }
+                Token::Atom(_word) => {}
+            }
+        }
+
+        Ok(())
     }
 
     fn are_tokens_eq(a: &Tokens, b: &Tokens) -> bool {
@@ -541,12 +638,15 @@ impl SymCorpus {
                 .collect::<Vec<_>>();
             sorted_types.sort();
 
+            // Output the F# record in form `F#<filename> <type@variant>... <export>...`. Types with
+            // only one variant in the entire consolidated file can be skipped because they can be
+            // implicitly determined by a reader.
             write!(writer, "F#{}", symfile.path.display());
             for &(_, name, remap_idx) in &sorted_types {
-                if remap_idx == usize::MAX {
-                    write!(writer, " {}", name);
-                } else {
+                if remap_idx != usize::MAX {
                     write!(writer, " {}@{}", name, remap_idx);
+                } else if Self::is_export(name) {
+                    write!(writer, " {}", name);
                 }
             }
             writeln!(writer, "");
