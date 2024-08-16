@@ -61,6 +61,12 @@ pub struct SymCorpus {
 
 type TypeChanges<'a> = HashMap<&'a str, Vec<(&'a Tokens, &'a Tokens)>>;
 
+struct ParallelLoadContext {
+    types: Mutex<Types>,
+    exports: Mutex<Exports>,
+    files: Mutex<SymFiles>,
+}
+
 impl SymCorpus {
     pub fn new() -> Self {
         Self {
@@ -86,12 +92,66 @@ impl SymCorpus {
         if md.is_dir() {
             return self.load_dir(path);
         } else {
-            return self.read_single_file(path);
+            // TODO Simplify.
+            let load_context = ParallelLoadContext {
+                types: Mutex::new(Types::new()),
+                exports: Mutex::new(Exports::new()),
+                files: Mutex::new(SymFiles::new()),
+            };
+            Self::read_single_file(path, &load_context)?;
+            *self = Self {
+                types: load_context.types.into_inner().unwrap(),
+                exports: load_context.exports.into_inner().unwrap(),
+                files: load_context.files.into_inner().unwrap(),
+            };
         }
+        Ok(())
     }
 
     /// Loads symtypes in a specified directory, recursively.
     pub fn load_dir(&mut self, path: &Path) -> Result<(), crate::Error> {
+        // TODO Make configurable.
+        let num_workers = 8;
+
+        // Collect all symtypes files.
+        let mut symfiles = Vec::new();
+        Self::collect_symfiles(path, &mut symfiles)?;
+
+        // Load data from the files.
+        let next_work_idx = AtomicUsize::new(0);
+
+        let load_context = ParallelLoadContext {
+            types: Mutex::new(Types::new()),
+            exports: Mutex::new(Exports::new()),
+            files: Mutex::new(SymFiles::new()),
+        };
+
+        thread::scope(|s| {
+            for _ in 0..num_workers {
+                s.spawn(|| loop {
+                    let work_idx = next_work_idx.fetch_add(1, Ordering::Relaxed);
+                    if work_idx >= symfiles.len() {
+                        break;
+                    }
+                    let symfile = symfiles[work_idx].as_path();
+
+                    // TODO Error handling.
+                    Self::read_single_file(symfile, &load_context);
+                });
+            }
+        });
+
+        *self = Self {
+            types: load_context.types.into_inner().unwrap(),
+            exports: load_context.exports.into_inner().unwrap(),
+            files: load_context.files.into_inner().unwrap(),
+        };
+
+        Ok(())
+    }
+
+    /// Collects recursively all symtypes under a given path.
+    fn collect_symfiles(path: &Path, symfiles: &mut Vec<PathBuf>) -> Result<(), crate::Error> {
         // TODO Report errors and skip directories?
         let dir_iter = match fs::read_dir(path) {
             Ok(dir_iter) => dir_iter,
@@ -102,6 +162,7 @@ impl SymCorpus {
                 ))
             }
         };
+
         for maybe_entry in dir_iter {
             let entry = match maybe_entry {
                 Ok(entry) => entry,
@@ -114,7 +175,7 @@ impl SymCorpus {
             };
             let entry_path = entry.path();
             if entry_path.is_dir() {
-                self.load_dir(&entry_path)?;
+                Self::collect_symfiles(&entry_path, symfiles)?;
                 continue;
             }
 
@@ -124,14 +185,17 @@ impl SymCorpus {
                 None => continue,
             };
             if ext == "symtypes" {
-                self.read_single_file(&entry_path)?;
+                symfiles.push(entry_path.to_path_buf());
             }
         }
         Ok(())
     }
 
     /// Loads symtypes data from a specified file.
-    pub fn read_single_file(&mut self, path: &Path) -> Result<(), crate::Error> {
+    fn read_single_file(
+        path: &Path,
+        load_context: &ParallelLoadContext,
+    ) -> Result<(), crate::Error> {
         let file = match File::open(path) {
             Ok(file) => file,
             Err(err) => {
@@ -142,12 +206,16 @@ impl SymCorpus {
             }
         };
 
-        self.read_single(path, file)
+        Self::read_single(path, file, load_context)
     }
 
     /// Loads symtypes data from a specified reader.
     // TODO Write better description.
-    pub fn read_single<R>(&mut self, path: &Path, reader: R) -> Result<(), crate::Error>
+    fn read_single<R>(
+        path: &Path,
+        reader: R,
+        load_context: &ParallelLoadContext,
+    ) -> Result<(), crate::Error>
     where
         R: io::Read,
     {
@@ -231,7 +299,7 @@ impl SymCorpus {
             }
 
             // Insert the type into the corpus.
-            let variant_idx = self.merge_type(name, tokens);
+            let variant_idx = Self::merge_type(name, tokens, &load_context.types);
 
             // Record a mapping from the original variant name/index to the new one.
             if is_consolidated {
@@ -245,7 +313,11 @@ impl SymCorpus {
 
                 // TODO Check for duplicates.
                 if Self::is_export(name) {
-                    self.exports.insert(name.to_string(), self.files.len());
+                    let mut exports = load_context.exports.lock().unwrap();
+                    // TODO FIXME Fix the race.
+                    let mut files = load_context.files.lock().unwrap();
+                    let file_idx = files.len();
+                    exports.insert(name.to_string(), files.len());
                 }
             }
         }
@@ -302,7 +374,11 @@ impl SymCorpus {
 
                     // TODO Check for duplicates.
                     if Self::is_export(type_name) {
-                        self.exports.insert(type_name.to_string(), self.files.len());
+                        let mut exports = load_context.exports.lock().unwrap();
+                        // TODO FIXME Fix the race.
+                        let mut files = load_context.files.lock().unwrap();
+                        let file_idx = files.len();
+                        exports.insert(type_name.to_string(), file_idx);
                     }
                 }
 
@@ -313,12 +389,15 @@ impl SymCorpus {
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
                 for (name, variant_idx) in walk_records {
-                    self.extrapolate_file_record(
+                    // TODO Simplify.
+                    let types = load_context.types.lock().unwrap();
+                    Self::extrapolate_file_record(
                         path,
                         file_name,
                         &name,
                         variant_idx,
                         true,
+                        &*types,
                         &mut records,
                     );
                 }
@@ -327,7 +406,8 @@ impl SymCorpus {
                     path: Path::new(file_name).to_path_buf(),
                     records: records,
                 };
-                self.files.push(symfile);
+                let mut files = load_context.files.lock().unwrap();
+                files.push(symfile);
             }
         } else {
             // TODO Drop the root prefix.
@@ -335,15 +415,17 @@ impl SymCorpus {
                 path: path.to_path_buf(),
                 records: records,
             };
-            self.files.push(symfile);
+            let mut files = load_context.files.lock().unwrap();
+            files.push(symfile);
         }
 
         Ok(())
     }
 
-    fn merge_type(&mut self, name: &str, tokens: Tokens) -> usize {
+    fn merge_type(name: &str, tokens: Tokens, types: &Mutex<Types>) -> usize {
+        let mut types = types.lock().unwrap();
         // TODO Use .entry()?
-        match self.types.get_mut(name) {
+        match types.get_mut(name) {
             Some(variants) => {
                 for (i, variant) in variants.iter().enumerate() {
                     if Self::are_tokens_eq(&tokens, variant) {
@@ -356,7 +438,7 @@ impl SymCorpus {
             None => {
                 let mut variants = Vec::new();
                 variants.push(tokens);
-                self.types.insert(name.to_string(), variants);
+                types.insert(name.to_string(), variants);
                 return 0;
             }
         }
@@ -376,12 +458,12 @@ impl SymCorpus {
     /// calls should be invoked with `is_explicit` set to `true`. The function then recursively adds
     /// all needed implicit types which are referenced from these roots.
     fn extrapolate_file_record(
-        &self,
         corpus_path: &Path,
         file_name: &str,
         name: &str,
         variant_idx: usize,
         is_explicit: bool,
+        types: &Types,
         records: &mut FileRecords,
     ) -> Result<(), crate::Error> {
         if is_explicit {
@@ -404,7 +486,7 @@ impl SymCorpus {
         }
 
         // Obtain tokens for the selected variant and check it is correctly specified.
-        let variants = self.types.get(name).unwrap();
+        let variants = types.get(name).unwrap();
         assert!(variants.len() > 0);
         if !is_explicit && variants.len() > 1 {
             return Err(crate::Error::new_parse(&format!(
@@ -426,12 +508,13 @@ impl SymCorpus {
                     // * If the type is implicit then it can have only one variant and so only
                     //   variant_idx=0 can be correct. The invoked function will check that no more
                     //   than one variant is actually present.
-                    self.extrapolate_file_record(
+                    Self::extrapolate_file_record(
                         corpus_path,
                         file_name,
                         ref_name,
                         0,
                         false,
+                        types,
                         records,
                     );
                 }
@@ -761,6 +844,7 @@ impl SymCorpus {
         processed: &mut HashSet<String>,
         changes: &Mutex<TypeChanges<'a>>,
     ) {
+        // TODO Take into account different variants?
         match processed.get(name) {
             Some(_) => return,
             None => {}
