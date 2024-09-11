@@ -96,7 +96,7 @@ where
     debug!("Consolidate '{}' to '{}'", dir, output);
 
     let mut syms = SymCorpus::new();
-    match syms.load_dir(&Path::new(&dir)) {
+    match syms.load(&Path::new(&dir)) {
         Ok(_) => {}
         Err(err) => {
             eprintln!("Failed to read symtypes from '{}': {}", dir, err);

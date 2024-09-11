@@ -89,65 +89,16 @@ impl SymCorpus {
             }
         };
 
-        if md.is_dir() {
-            return self.load_dir(path);
-        } else {
-            // TODO Simplify.
-            let load_context = ParallelLoadContext {
-                types: Mutex::new(Types::new()),
-                exports: Mutex::new(Exports::new()),
-                files: Mutex::new(SymFiles::new()),
-            };
-            Self::read_single_file(path, &load_context)?;
-            *self = Self {
-                types: load_context.types.into_inner().unwrap(),
-                exports: load_context.exports.into_inner().unwrap(),
-                files: load_context.files.into_inner().unwrap(),
-            };
-        }
-        Ok(())
-    }
-
-    /// Loads symtypes in a specified directory, recursively.
-    pub fn load_dir(&mut self, path: &Path) -> Result<(), crate::Error> {
-        // TODO Make configurable.
-        let num_workers = 8;
-
-        // Collect all symtypes files.
+        // Collect recursively all symtypes if it is a directory, or push the single file.
         let mut symfiles = Vec::new();
-        Self::collect_symfiles(path, &mut symfiles)?;
+        if md.is_dir() {
+            Self::collect_symfiles(path, &mut symfiles)?;
+        } else {
+            symfiles.push(path.to_path_buf());
+        }
 
-        // Load data from the files.
-        let next_work_idx = AtomicUsize::new(0);
-
-        let load_context = ParallelLoadContext {
-            types: Mutex::new(Types::new()),
-            exports: Mutex::new(Exports::new()),
-            files: Mutex::new(SymFiles::new()),
-        };
-
-        thread::scope(|s| {
-            for _ in 0..num_workers {
-                s.spawn(|| loop {
-                    let work_idx = next_work_idx.fetch_add(1, Ordering::Relaxed);
-                    if work_idx >= symfiles.len() {
-                        break;
-                    }
-                    let symfile = symfiles[work_idx].as_path();
-
-                    // TODO Error handling.
-                    Self::read_single_file(symfile, &load_context);
-                });
-            }
-        });
-
-        *self = Self {
-            types: load_context.types.into_inner().unwrap(),
-            exports: load_context.exports.into_inner().unwrap(),
-            files: load_context.files.into_inner().unwrap(),
-        };
-
-        Ok(())
+        // Load all files.
+        self.load_multiple(&symfiles)
     }
 
     /// Collects recursively all symtypes under a given path.
@@ -191,27 +142,56 @@ impl SymCorpus {
         Ok(())
     }
 
-    /// Loads symtypes data from a specified file.
-    fn read_single_file(
-        path: &Path,
-        load_context: &ParallelLoadContext,
-    ) -> Result<(), crate::Error> {
-        let file = match File::open(path) {
-            Ok(file) => file,
-            Err(err) => {
-                return Err(crate::Error::new_io(
-                    &format!("Failed to open file '{}'", path.display()),
-                    err,
-                ))
-            }
+    /// Loads all specified symtypes.
+    pub fn load_multiple(&mut self, symfiles: &Vec<PathBuf>) -> Result<(), crate::Error> {
+        // TODO Make configurable.
+        let num_workers = 8;
+
+        // Load data from the files.
+        let next_work_idx = AtomicUsize::new(0);
+
+        let load_context = ParallelLoadContext {
+            types: Mutex::new(Types::new()),
+            exports: Mutex::new(Exports::new()),
+            files: Mutex::new(SymFiles::new()),
         };
 
-        Self::read_single(path, file, load_context)
+        thread::scope(|s| {
+            for _ in 0..num_workers {
+                // TODO Result/Error handling.
+                s.spawn(|| loop {
+                    let work_idx = next_work_idx.fetch_add(1, Ordering::Relaxed);
+                    if work_idx >= symfiles.len() {
+                        return Ok(());
+                    }
+                    let path = symfiles[work_idx].as_path();
+
+                    let file = match File::open(path) {
+                        Ok(file) => file,
+                        Err(err) => {
+                            return Err(crate::Error::new_io(
+                                &format!("Failed to open file '{}'", path.display()),
+                                err,
+                            ))
+                        }
+                    };
+
+                    Self::load_single(path, file, &load_context)?;
+                });
+            }
+        });
+
+        *self = Self {
+            types: load_context.types.into_inner().unwrap(),
+            exports: load_context.exports.into_inner().unwrap(),
+            files: load_context.files.into_inner().unwrap(),
+        };
+
+        Ok(())
     }
 
     /// Loads symtypes data from a specified reader.
-    // TODO Write better description.
-    fn read_single<R>(
+    fn load_single<R>(
         path: &Path,
         reader: R,
         load_context: &ParallelLoadContext,
