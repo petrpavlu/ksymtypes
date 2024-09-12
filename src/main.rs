@@ -131,12 +131,9 @@ where
         let _timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path));
 
         let mut syms = SymCorpus::new();
-        match syms.load(&Path::new(&path)) {
-            Ok(_) => {}
-            Err(err) => {
-                eprintln!("Failed to read symtypes from '{}': {}", path, err);
-                return Err(());
-            }
+        if let Err(err) = syms.load(&Path::new(&path)) {
+            eprintln!("Failed to read symtypes from '{}': {}", path, err);
+            return Err(());
         }
         syms
     };
@@ -147,15 +144,12 @@ where
             &format!("Writing consolidated symtypes to '{}'", output),
         );
 
-        match syms.write_consolidated_file(&output) {
-            Ok(_) => {}
-            Err(err) => {
-                eprintln!(
-                    "Failed to write consolidated symtypes to '{}': {}",
-                    output, err
-                );
-                return Err(());
-            }
+        if let Err(err) = syms.write_consolidated_file(&output) {
+            eprintln!(
+                "Failed to write consolidated symtypes to '{}': {}",
+                output, err
+            );
+            return Err(());
         }
     }
 
@@ -213,12 +207,9 @@ where
         let _timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path1));
 
         let mut syms1 = SymCorpus::new();
-        match syms1.load(&Path::new(&path1)) {
-            Ok(_) => {}
-            Err(err) => {
-                eprintln!("Failed to read symtypes from '{}': {}", path1, err);
-                return Err(());
-            }
+        if let Err(err) = syms1.load(&Path::new(&path1)) {
+            eprintln!("Failed to read symtypes from '{}': {}", path1, err);
+            return Err(());
         }
         syms1
     };
@@ -227,12 +218,9 @@ where
         let _timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path1));
 
         let mut syms2 = SymCorpus::new();
-        match syms2.load(&Path::new(&path2)) {
-            Ok(_) => {}
-            Err(err) => {
-                eprintln!("Failed to read symtypes from '{}': {}", path2, err);
-                return Err(());
-            }
+        if let Err(err) = syms2.load(&Path::new(&path2)) {
+            eprintln!("Failed to read symtypes from '{}': {}", path2, err);
+            return Err(());
         }
         syms2
     };
