@@ -86,23 +86,65 @@ fn print_compare_usage(program: &str) {
     );
 }
 
+/// Handles an option with a mandatory value.
+///
+/// When the `arg` matches the `short` or `long` variant, the function returns [`Ok(Some(String))`]
+/// with the option value. Otherwise, [`Ok(None)`] is returned when the `arg` doesn't match, or
+/// [`Err`] in case of an error.
+fn handle_value_option<I>(
+    arg: &str,
+    args: &mut I,
+    short: &str,
+    long: &str,
+) -> Result<Option<String>, ()>
+where
+    I: Iterator<Item = String>,
+{
+    // Handle '-<short> <value>' and '--<long> <value>'.
+    if arg == short || arg == long {
+        match args.next() {
+            Some(value) => return Ok(Some(value.to_string())),
+            None => {
+                eprintln!("Missing argument for '{}'", long);
+                return Err(());
+            }
+        };
+    }
+
+    // Handle '--<long>=<value>'.
+    if let Some(rem) = arg.strip_prefix(long) {
+        if let Some(value) = rem.strip_prefix("=") {
+            return Ok(Some(value.to_string()));
+        }
+    }
+
+    Ok(None)
+}
+
 /// Handles the `consolidate` command which consolidates symtypes into a single file.
 fn do_consolidate<I>(program: &str, do_timing: bool, args: I) -> Result<(), ()>
 where
     I: IntoIterator<Item = String>,
 {
     // Parse specific command options.
+    let mut args = args.into_iter();
     let mut output = "-".to_string();
     let mut maybe_path = None;
-    for arg in args.into_iter() {
+
+    loop {
+        let arg = match args.next() {
+            Some(arg) => arg,
+            None => break,
+        };
+
+        if let Some(value) = handle_value_option(&arg, &mut args, "-o", "--output")? {
+            output = value;
+            continue;
+        }
+
         if arg == "-h" || arg == "--help" {
             print_consolidate_usage(&program);
             return Ok(());
-        }
-        if arg == "-o" || arg == "--output" {
-            // TODO Implement correctly.
-            output = arg.to_string();
-            continue;
         }
         if arg.starts_with("-") || arg.starts_with("--") {
             eprintln!("Unrecognized consolidate option '{}'", arg);
@@ -162,9 +204,16 @@ where
     I: IntoIterator<Item = String>,
 {
     // Parse specific command options.
+    let mut args = args.into_iter();
     let mut maybe_path1 = None;
     let mut maybe_path2 = None;
-    for arg in args.into_iter() {
+
+    loop {
+        let arg = match args.next() {
+            Some(arg) => arg,
+            None => break,
+        };
+
         if arg == "-h" || arg == "--help" {
             print_compare_usage(&program);
             return Ok(());
@@ -256,13 +305,14 @@ fn main() {
             None => break,
         };
 
-        if arg == "-h" || arg == "--help" {
-            print_usage(&program);
-            process::exit(0);
-        }
         if arg == "--timing" {
             do_timing = true;
             continue;
+        }
+
+        if arg == "-h" || arg == "--help" {
+            print_usage(&program);
+            process::exit(0);
         }
         if arg.starts_with("-") || arg.starts_with("--") {
             eprintln!("Unrecognized global option '{}'", arg);
