@@ -66,6 +66,7 @@ fn print_consolidate_usage(program: &str) {
             "\n",
             "OPTIONS\n",
             "  -h, --help            print this help\n",
+            "  -j, --jobs=NUM        use NUM workers to perform the operation simultaneously\n",
             "  -o, --output=FILE     write the result in a specified file, instead of stdout\n",
         ),
         program
@@ -81,6 +82,7 @@ fn print_compare_usage(program: &str) {
             "\n",
             "OPTIONS\n",
             "  -h, --help            print this help\n",
+            "  -j, --jobs=NUM        use NUM workers to perform the operation simultaneously\n",
         ),
         program
     );
@@ -121,6 +123,31 @@ where
     Ok(None)
 }
 
+/// Handles the `-j`/`--jobs` option which specifies the number of workers to perform a given
+/// operation simultaneously.
+fn handle_jobs_option<I>(arg: &str, args: &mut I) -> Result<Option<i32>, ()>
+where
+    I: Iterator<Item = String>,
+{
+    if let Some(value) = handle_value_option(arg, args, "-j", "--jobs")? {
+        match value.parse::<i32>() {
+            Ok(jobs) => {
+                if jobs < 1 {
+                    eprintln!("Invalid value for '{}': must be positive", arg);
+                    return Err(());
+                }
+                return Ok(Some(jobs));
+            }
+            Err(err) => {
+                eprintln!("Invalid value for '{}': {}", arg, err);
+                return Err(());
+            }
+        };
+    }
+
+    Ok(None)
+}
+
 /// Handles the `consolidate` command which consolidates symtypes into a single file.
 fn do_consolidate<I>(program: &str, do_timing: bool, args: I) -> Result<(), ()>
 where
@@ -129,6 +156,7 @@ where
     // Parse specific command options.
     let mut args = args.into_iter();
     let mut output = "-".to_string();
+    let mut num_workers = 1;
     let mut maybe_path = None;
 
     loop {
@@ -139,6 +167,10 @@ where
 
         if let Some(value) = handle_value_option(&arg, &mut args, "-o", "--output")? {
             output = value;
+            continue;
+        }
+        if let Some(value) = handle_jobs_option(&arg, &mut args)? {
+            num_workers = value;
             continue;
         }
 
@@ -173,7 +205,7 @@ where
         let _timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path));
 
         let mut syms = SymCorpus::new();
-        if let Err(err) = syms.load(&Path::new(&path)) {
+        if let Err(err) = syms.load(&Path::new(&path), num_workers) {
             eprintln!("Failed to read symtypes from '{}': {}", path, err);
             return Err(());
         }
@@ -205,6 +237,7 @@ where
 {
     // Parse specific command options.
     let mut args = args.into_iter();
+    let mut num_workers = 1;
     let mut maybe_path1 = None;
     let mut maybe_path2 = None;
 
@@ -213,6 +246,11 @@ where
             Some(arg) => arg,
             None => break,
         };
+
+        if let Some(value) = handle_jobs_option(&arg, &mut args)? {
+            num_workers = value;
+            continue;
+        }
 
         if arg == "-h" || arg == "--help" {
             print_compare_usage(&program);
@@ -256,7 +294,7 @@ where
         let _timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path1));
 
         let mut syms1 = SymCorpus::new();
-        if let Err(err) = syms1.load(&Path::new(&path1)) {
+        if let Err(err) = syms1.load(&Path::new(&path1), num_workers) {
             eprintln!("Failed to read symtypes from '{}': {}", path1, err);
             return Err(());
         }
@@ -267,7 +305,7 @@ where
         let _timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path1));
 
         let mut syms2 = SymCorpus::new();
-        if let Err(err) = syms2.load(&Path::new(&path2)) {
+        if let Err(err) = syms2.load(&Path::new(&path2), num_workers) {
             eprintln!("Failed to read symtypes from '{}': {}", path2, err);
             return Err(());
         }
@@ -277,7 +315,7 @@ where
     {
         let _timing = Timing::new(do_timing, "Comparison");
 
-        syms1.compare_with(&syms2);
+        syms1.compare_with(&syms2, num_workers);
     }
 
     Ok(())

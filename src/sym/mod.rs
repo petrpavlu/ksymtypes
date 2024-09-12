@@ -77,7 +77,7 @@ impl SymCorpus {
     }
 
     // TODO Describe.
-    pub fn load(&mut self, path: &Path) -> Result<(), crate::Error> {
+    pub fn load(&mut self, path: &Path, num_workers: i32) -> Result<(), crate::Error> {
         // Determine if the input is a directory tree or a single symtypes file.
         let md = match fs::metadata(path) {
             Ok(md) => md,
@@ -98,7 +98,7 @@ impl SymCorpus {
         }
 
         // Load all files.
-        self.load_multiple(&symfiles)
+        self.load_multiple(&symfiles, num_workers)
     }
 
     /// Collects recursively all symtypes under a given path.
@@ -143,10 +143,11 @@ impl SymCorpus {
     }
 
     /// Loads all specified symtypes.
-    pub fn load_multiple(&mut self, symfiles: &Vec<PathBuf>) -> Result<(), crate::Error> {
-        // TODO Make configurable.
-        let num_workers = 8;
-
+    pub fn load_multiple(
+        &mut self,
+        symfiles: &Vec<PathBuf>,
+        num_workers: i32,
+    ) -> Result<(), crate::Error> {
         // Load data from the files.
         let next_work_idx = AtomicUsize::new(0);
 
@@ -866,10 +867,7 @@ impl SymCorpus {
         }
     }
 
-    pub fn compare_with(&self, other: &SymCorpus) {
-        // TODO Make configurable.
-        let num_workers = 8;
-
+    pub fn compare_with(&self, other: &SymCorpus, num_workers: i32) {
         let works: Vec<_> = self.exports.iter().collect();
         let next_work_idx = AtomicUsize::new(0);
 
