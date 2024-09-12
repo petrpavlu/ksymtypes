@@ -7,6 +7,39 @@ use std::path::Path;
 use std::time::Instant;
 use std::{env, process};
 
+/// A type to measure elapsed time for some operation.
+///
+/// The time is measured between when the object is instantiated and when it is dropped. A message
+/// with the elapsed time is output when the object is dropped.
+enum Timing {
+    Active { desc: String, start: Instant },
+    Inactive,
+}
+
+impl Timing {
+    fn new(do_timing: bool, desc: &str) -> Self {
+        if do_timing {
+            Timing::Active {
+                desc: desc.to_string(),
+                start: Instant::now(),
+            }
+        } else {
+            Timing::Inactive
+        }
+    }
+}
+
+impl Drop for Timing {
+    fn drop(&mut self) {
+        match self {
+            Timing::Active { desc, start } => {
+                eprintln!("{}: {:.3?}", desc, start.elapsed());
+            }
+            Timing::Inactive => {}
+        }
+    }
+}
+
 /// Prints the global usage message on `stdout`.
 fn print_usage(program: &str) {
     print!(
@@ -54,7 +87,7 @@ fn print_compare_usage(program: &str) {
 }
 
 /// Handles the `consolidate` command which consolidates symtypes into a single file.
-fn do_consolidate<I>(program: &str, timing: bool, args: I) -> Result<(), ()>
+fn do_consolidate<I>(program: &str, do_timing: bool, args: I) -> Result<(), ()>
 where
     I: IntoIterator<Item = String>,
 {
@@ -92,25 +125,38 @@ where
         }
     };
 
-    // Do the comparison.
+    // Do the consolidation.
     debug!("Consolidate '{}' to '{}'", dir, output);
 
-    let mut syms = SymCorpus::new();
-    match syms.load(&Path::new(&dir)) {
-        Ok(_) => {}
-        Err(err) => {
-            eprintln!("Failed to read symtypes from '{}': {}", dir, err);
-            return Err(());
+    let mut syms = {
+        let timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", dir));
+
+        let mut syms = SymCorpus::new();
+        match syms.load(&Path::new(&dir)) {
+            Ok(_) => {}
+            Err(err) => {
+                eprintln!("Failed to read symtypes from '{}': {}", dir, err);
+                return Err(());
+            }
         }
+        syms
     };
-    match syms.write_consolidated_file(&output) {
-        Ok(_) => {}
-        Err(err) => {
-            eprintln!(
-                "Failed to write consolidated symtypes to '{}': {}",
-                output, err
-            );
-            return Err(());
+
+    {
+        let timing = Timing::new(
+            do_timing,
+            &format!("Writing consolidated symtypes to '{}'", output),
+        );
+
+        match syms.write_consolidated_file(&output) {
+            Ok(_) => {}
+            Err(err) => {
+                eprintln!(
+                    "Failed to write consolidated symtypes to '{}': {}",
+                    output, err
+                );
+                return Err(());
+            }
         }
     }
 
@@ -118,7 +164,7 @@ where
 }
 
 /// Handles the `compare` command which shows differences between two symtypes corpuses.
-fn do_compare<I>(program: &str, timing: bool, args: I) -> Result<(), ()>
+fn do_compare<I>(program: &str, do_timing: bool, args: I) -> Result<(), ()>
 where
     I: IntoIterator<Item = String>,
 {
@@ -164,51 +210,38 @@ where
     // Do the comparison.
     debug!("Compare '{}' and '{}'", path1, path2);
 
-    let mut now = None;
-    if timing {
-        now = Some(Instant::now());
-    }
-    let mut s1 = SymCorpus::new();
-    match s1.load(&Path::new(&path1)) {
-        Ok(_) => {}
-        Err(err) => {
-            eprintln!("Failed to read symtypes from '{}': {}", path1, err);
-            return Err(());
-        }
-    };
-    if timing {
-        println!(
-            "Reading symtypes from '{}' took {:.3?}",
-            path1,
-            now.unwrap().elapsed()
-        );
-    }
+    let mut syms1 = {
+        let timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path1));
 
-    if timing {
-        now = Some(Instant::now());
-    }
-    let mut s2 = SymCorpus::new();
-    match s2.load(&Path::new(&path2)) {
-        Ok(_) => {}
-        Err(err) => {
-            eprintln!("Failed to read symtypes from '{}': {}", path2, err);
-            return Err(());
+        let mut syms1 = SymCorpus::new();
+        match syms1.load(&Path::new(&path1)) {
+            Ok(_) => {}
+            Err(err) => {
+                eprintln!("Failed to read symtypes from '{}': {}", path1, err);
+                return Err(());
+            }
         }
+        syms1
     };
-    if timing {
-        println!(
-            "Reading symtypes from '{}' took {:.3?}",
-            path2,
-            now.unwrap().elapsed()
-        );
-    }
 
-    if timing {
-        now = Some(Instant::now());
-    }
-    s1.compare_with(&s2);
-    if timing {
-        println!("Comparison took {:.3?}", now.unwrap().elapsed());
+    let mut syms2 = {
+        let timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path1));
+
+        let mut syms2 = SymCorpus::new();
+        match syms2.load(&Path::new(&path2)) {
+            Ok(_) => {}
+            Err(err) => {
+                eprintln!("Failed to read symtypes from '{}': {}", path2, err);
+                return Err(());
+            }
+        }
+        syms2
+    };
+
+    {
+        let timing = Timing::new(do_timing, "Comparison");
+
+        syms1.compare_with(&syms2);
     }
 
     Ok(())
@@ -229,7 +262,7 @@ fn main() {
 
     // Handle global options and stop at the command.
     let mut maybe_command = None;
-    let mut timing = false;
+    let mut do_timing = false;
     loop {
         let arg = match args.next() {
             Some(arg) => arg,
@@ -241,7 +274,7 @@ fn main() {
             process::exit(0);
         }
         if arg == "--timing" {
-            timing = true;
+            do_timing = true;
             continue;
         }
         if arg.starts_with("-") || arg.starts_with("--") {
@@ -263,12 +296,12 @@ fn main() {
     // Process the specified command.
     match command.as_str() {
         "consolidate" => {
-            if let Err(_) = do_consolidate(&program, timing, args) {
+            if let Err(_) = do_consolidate(&program, do_timing, args) {
                 process::exit(1);
             }
         }
         "compare" => {
-            if let Err(_) = do_compare(&program, timing, args) {
+            if let Err(_) = do_compare(&program, do_timing, args) {
                 process::exit(1);
             }
         }
