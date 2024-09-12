@@ -93,8 +93,7 @@ where
 {
     // Parse specific command options.
     let mut output = "-".to_string();
-    // TODO dir -> path for consistency with compare.
-    let mut maybe_dir = None;
+    let mut maybe_path = None;
     for arg in args.into_iter() {
         if arg == "-h" || arg == "--help" {
             print_consolidate_usage(&program);
@@ -109,16 +108,16 @@ where
             eprintln!("Unrecognized consolidate option '{}'", arg);
             return Err(());
         }
-        if maybe_dir.is_none() {
-            maybe_dir = Some(arg);
+        if maybe_path.is_none() {
+            maybe_path = Some(arg);
             continue;
         }
         eprintln!("Excess consolidate argument '{}' specified", arg);
         return Err(());
     }
 
-    let dir = match maybe_dir {
-        Some(dir) => dir,
+    let path = match maybe_path {
+        Some(path) => path,
         None => {
             eprintln!("The consolidate source is missing");
             return Err(());
@@ -126,16 +125,16 @@ where
     };
 
     // Do the consolidation.
-    debug!("Consolidate '{}' to '{}'", dir, output);
+    debug!("Consolidate '{}' to '{}'", path, output);
 
     let mut syms = {
-        let timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", dir));
+        let timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path));
 
         let mut syms = SymCorpus::new();
-        match syms.load(&Path::new(&dir)) {
+        match syms.load(&Path::new(&path)) {
             Ok(_) => {}
             Err(err) => {
-                eprintln!("Failed to read symtypes from '{}': {}", dir, err);
+                eprintln!("Failed to read symtypes from '{}': {}", path, err);
                 return Err(());
             }
         }
