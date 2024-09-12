@@ -127,8 +127,8 @@ where
     // Do the consolidation.
     debug!("Consolidate '{}' to '{}'", path, output);
 
-    let mut syms = {
-        let timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path));
+    let syms = {
+        let _timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path));
 
         let mut syms = SymCorpus::new();
         match syms.load(&Path::new(&path)) {
@@ -142,7 +142,7 @@ where
     };
 
     {
-        let timing = Timing::new(
+        let _timing = Timing::new(
             do_timing,
             &format!("Writing consolidated symtypes to '{}'", output),
         );
@@ -209,8 +209,8 @@ where
     // Do the comparison.
     debug!("Compare '{}' and '{}'", path1, path2);
 
-    let mut syms1 = {
-        let timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path1));
+    let syms1 = {
+        let _timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path1));
 
         let mut syms1 = SymCorpus::new();
         match syms1.load(&Path::new(&path1)) {
@@ -223,8 +223,8 @@ where
         syms1
     };
 
-    let mut syms2 = {
-        let timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path1));
+    let syms2 = {
+        let _timing = Timing::new(do_timing, &format!("Reading symtypes from '{}'", path1));
 
         let mut syms2 = SymCorpus::new();
         match syms2.load(&Path::new(&path2)) {
@@ -238,7 +238,7 @@ where
     };
 
     {
-        let timing = Timing::new(do_timing, "Comparison");
+        let _timing = Timing::new(do_timing, "Comparison");
 
         syms1.compare_with(&syms2);
     }
