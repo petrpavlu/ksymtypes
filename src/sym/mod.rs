@@ -216,6 +216,21 @@ impl SymCorpus {
             }
         }
 
+        let file_idx = if !is_consolidated {
+            // Record the file early to determine its file_idx.
+            let symfile = SymFile {
+                // TODO Drop the root prefix.
+                path: path.to_path_buf(),
+                records: FileRecords::new(),
+            };
+
+            let mut files = load_context.files.lock().unwrap();
+            files.push(symfile);
+            files.len() - 1
+        } else {
+            usize::MAX
+        };
+
         // Parse all declarations.
         let mut file_indices = Vec::new();
         for (i, line) in lines.iter().enumerate() {
@@ -255,22 +270,21 @@ impl SymCorpus {
             // Insert the type into the corpus.
             let variant_idx = Self::merge_type(name, tokens, &load_context.types);
 
-            // Record a mapping from the original variant name/index to the new one.
             if is_consolidated {
+                // Record a mapping from the original variant name/index to the new one.
                 remap
                     .entry(name.to_string())
                     .or_insert_with(|| HashMap::new())
                     .insert(orig_variant_name.to_string(), variant_idx);
             } else {
+                // Add the line to the file records.
                 records.insert(name.to_string(), variant_idx);
 
+                // Record any exports.
                 // TODO Check for duplicates.
                 if Self::is_export(name) {
                     let mut exports = load_context.exports.lock().unwrap();
-                    // TODO FIXME Fix the race.
-                    let mut files = load_context.files.lock().unwrap();
-                    let file_idx = files.len();
-                    exports.insert(name.to_string(), files.len());
+                    exports.insert(name.to_string(), file_idx);
                 }
             }
         }
@@ -285,6 +299,16 @@ impl SymCorpus {
                 let record_name = words.next().unwrap();
                 assert!(record_name.starts_with("F#"));
                 let file_name = &record_name[2..];
+
+                let file_idx = {
+                    let symfile = SymFile {
+                        path: Path::new(file_name).to_path_buf(),
+                        records: FileRecords::new(),
+                    };
+                    let mut files = load_context.files.lock().unwrap();
+                    files.push(symfile);
+                    files.len() - 1
+                };
 
                 let mut records = FileRecords::new();
                 for mut type_name in words {
@@ -328,9 +352,6 @@ impl SymCorpus {
                     // TODO Check for duplicates.
                     if Self::is_export(type_name) {
                         let mut exports = load_context.exports.lock().unwrap();
-                        // TODO FIXME Fix the race.
-                        let mut files = load_context.files.lock().unwrap();
-                        let file_idx = files.len();
                         exports.insert(type_name.to_string(), file_idx);
                     }
                 }
@@ -355,21 +376,13 @@ impl SymCorpus {
                     );
                 }
 
-                let symfile = SymFile {
-                    path: Path::new(file_name).to_path_buf(),
-                    records: records,
-                };
                 let mut files = load_context.files.lock().unwrap();
-                files.push(symfile);
+                files[file_idx].records = records;
             }
         } else {
-            // TODO Drop the root prefix.
-            let symfile = SymFile {
-                path: path.to_path_buf(),
-                records: records,
-            };
+            // Update the file records.
             let mut files = load_context.files.lock().unwrap();
-            files.push(symfile);
+            files[file_idx].records = records;
         }
 
         Ok(())
