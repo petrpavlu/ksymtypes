@@ -260,15 +260,12 @@ impl SymCorpus {
                 });
             }
 
-            // Parse the variant name/index which is appended as a suffix after the `@` character.
-            let orig_variant_name;
-            match name.rfind('@') {
-                Some(i) => {
+            // Parse any variant name/index which is appended as a suffix after the `@` character.
+            let mut orig_variant_name = "";
+            if is_consolidated {
+                if let Some(i) = name.rfind('@') {
                     orig_variant_name = &name[i + 1..];
                     name = &name[..i];
-                }
-                None => {
-                    orig_variant_name = "";
                 }
             }
 
@@ -282,7 +279,6 @@ impl SymCorpus {
                     .or_insert_with(|| HashMap::new())
                     .insert(orig_variant_name.to_string(), variant_idx);
             } else {
-                // TODO What if a @variant suffix is found in non-consolidated file?
                 records.insert(name.to_string(), variant_idx);
 
                 // TODO Check for duplicates.
