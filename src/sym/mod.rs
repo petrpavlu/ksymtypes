@@ -22,12 +22,10 @@ enum Token {
 }
 
 impl Token {
-    #[cfg(test)]
     fn new_typeref<S: Into<String>>(name: S) -> Self {
         Token::TypeRef(name.into())
     }
 
-    #[cfg(test)]
     fn new_atom<S: Into<String>>(name: S) -> Self {
         Token::Atom(name.into())
     }
@@ -242,23 +240,8 @@ impl SymCorpus {
                 }
             };
 
-            let mut tokens = Vec::new();
-            for word in words {
-                let mut is_typeref = false;
-                match word.chars().nth(1) {
-                    Some(ch) => {
-                        if ch == '#' {
-                            is_typeref = true;
-                        }
-                    }
-                    None => {}
-                }
-                tokens.push(if is_typeref {
-                    Token::TypeRef(word.to_string())
-                } else {
-                    Token::Atom(word.to_string())
-                });
-            }
+            // Turn the remaining words into tokens.
+            let mut tokens = Self::words_into_tokens(&mut words);
 
             // Parse any variant name/index which is appended as a suffix after the `@` character.
             let mut orig_variant_name = "";
@@ -411,6 +394,31 @@ impl SymCorpus {
             };
         }
         Ok(lines)
+    }
+
+    /// Reads words from a given iterator and converts them to a [`Vec`] of [`Token`]s.
+    fn words_into_tokens<'a, I>(words: &mut I) -> Vec<Token>
+    where
+        I: Iterator<Item = &'a str>,
+    {
+        let mut tokens = Vec::new();
+        for word in words {
+            let mut is_typeref = false;
+            match word.chars().nth(1) {
+                Some(ch) => {
+                    if ch == '#' {
+                        is_typeref = true;
+                    }
+                }
+                None => {}
+            }
+            tokens.push(if is_typeref {
+                Token::new_typeref(word)
+            } else {
+                Token::new_atom(word)
+            });
+        }
+        tokens
     }
 
     fn merge_type(name: &str, tokens: Tokens, types: &Mutex<Types>) -> usize {
