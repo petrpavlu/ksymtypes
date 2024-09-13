@@ -231,29 +231,46 @@ impl SymCorpus {
             usize::MAX
         };
 
+        // Track names of all entries to detect duplicates.
+        let mut all_names = HashSet::new();
+
         // Parse all declarations.
         let mut file_indices = Vec::new();
         for (i, line) in lines.iter().enumerate() {
-            // Check for a file declaration and remember its index. The file declarations are
-            // processed later after remapping of all symbol variants is known.
-            if line.starts_with("F#") {
-                file_indices.push(i);
-                continue;
-            }
-
-            // Handle a type/export record.
+            // Obtain a name of the record.
             let mut words = line.split_ascii_whitespace();
-
             let mut name = match words.next() {
                 Some(word) => word,
                 None => {
                     return Err(crate::Error::new_parse(&format!(
-                        "{}:{}: Expected a type name",
+                        "{}:{}: Expected a record name",
                         path.display(),
                         i + 1
                     )))
                 }
             };
+
+            // Check if the record is a duplicate of another one.
+            match all_names.get(name) {
+                Some(_) => {
+                    return Err(crate::Error::new_parse(&format!(
+                        "{}:{}: Duplicate record '{}'",
+                        path.display(),
+                        i + 1,
+                        name,
+                    )))
+                }
+                None => all_names.insert(name.to_string()),
+            };
+
+            // Check for a file declaration and remember its index. File declarations are processed
+            // later after remapping of all symbol variants is known.
+            if name.starts_with("F#") {
+                file_indices.push(i);
+                continue;
+            }
+
+            // Handle a type/export record.
 
             // Turn the remaining words into tokens.
             let mut tokens = Self::words_into_tokens(&mut words);
@@ -281,7 +298,6 @@ impl SymCorpus {
                 records.insert(name.to_string(), variant_idx);
 
                 // Record any exports.
-                // TODO Check for duplicates.
                 if Self::is_export(name) {
                     let mut exports = load_context.exports.lock().unwrap();
                     exports.insert(name.to_string(), file_idx);
@@ -349,7 +365,6 @@ impl SymCorpus {
                     };
                     records.insert(type_name.to_string(), variant_idx);
 
-                    // TODO Check for duplicates.
                     if Self::is_export(type_name) {
                         let mut exports = load_context.exports.lock().unwrap();
                         exports.insert(type_name.to_string(), file_idx);
