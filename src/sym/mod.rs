@@ -233,7 +233,13 @@ impl SymCorpus {
 
             let mut name = match words.next() {
                 Some(word) => word,
-                None => continue, // TODO
+                None => {
+                    return Err(crate::Error::new_parse(&format!(
+                        "{}:{}: Expected a type name",
+                        path.display(),
+                        i + 1
+                    )))
+                }
             };
 
             let mut tokens = Vec::new();
@@ -322,19 +328,19 @@ impl SymCorpus {
                             Some(&variant_idx) => variant_idx,
                             None => {
                                 return Err(crate::Error::new_parse(&format!(
-                                    "Type {}@{} is not known in file {}",
+                                    "{}: Type {}@{} is not known",
+                                    path.display(),
                                     type_name,
                                     orig_variant_name,
-                                    path.display(),
                                 )))
                             }
                         },
                         None => {
                             return Err(crate::Error::new_parse(&format!(
-                                "Type {}@{} is not known in file {}",
+                                "{}: Type {}@{} is not known",
+                                path.display(),
                                 type_name,
                                 orig_variant_name,
-                                path.display(),
                             )))
                         }
                     };
@@ -479,10 +485,10 @@ impl SymCorpus {
         assert!(variants.len() > 0);
         if !is_explicit && variants.len() > 1 {
             return Err(crate::Error::new_parse(&format!(
-                "Type '{}' is implicitly referenced by file '{}' but has multiple variants in corpus '{}'",
+                "{}: Type '{}' is implicitly referenced by file '{}' but has multiple variants in the corpus",
+                corpus_path.display(),
                 name,
                 file_name,
-                corpus_path.display(),
             )));
         }
         let tokens = &variants[variant_idx];
