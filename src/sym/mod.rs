@@ -373,7 +373,7 @@ impl SymCorpus {
                         true,
                         &*types,
                         &mut records,
-                    );
+                    )?;
                 }
 
                 let mut files = load_context.files.lock().unwrap();
@@ -528,7 +528,7 @@ impl SymCorpus {
                         false,
                         types,
                         records,
-                    );
+                    )?;
                 }
                 Token::Atom(_word) => {}
             }
