@@ -204,23 +204,10 @@ impl SymCorpus {
 
         // Read all declarations.
         // TODO Describe the types.
-        let reader = BufReader::new(reader);
         let mut records = FileRecords::new();
         let mut remap = HashMap::new();
 
-        // Read the file and split its content into a lines vector.
-        let mut lines = Vec::new();
-        for maybe_line in reader.lines() {
-            match maybe_line {
-                Ok(line) => lines.push(line),
-                Err(err) => {
-                    return Err(crate::Error::new_io(
-                        &format!("Failed to read data from file '{}'", path.display()),
-                        err,
-                    ))
-                }
-            };
-        }
+        let mut lines = Self::read_lines(path, reader)?;
 
         // Detect whether the input is a single or consolidated symtypes file.
         let mut is_consolidated = false;
@@ -401,6 +388,27 @@ impl SymCorpus {
         }
 
         Ok(())
+    }
+
+    /// Reads data from a specified reader and splits its content into a lines vector.
+    fn read_lines<R>(path: &Path, reader: R) -> Result<Vec<String>, crate::Error>
+    where
+        R: io::Read,
+    {
+        let reader = BufReader::new(reader);
+        let mut lines = Vec::new();
+        for maybe_line in reader.lines() {
+            match maybe_line {
+                Ok(line) => lines.push(line),
+                Err(err) => {
+                    return Err(crate::Error::new_io(
+                        &format!("Failed to read data from file '{}'", path.display()),
+                        err,
+                    ))
+                }
+            };
+        }
+        Ok(lines)
     }
 
     fn merge_type(name: &str, tokens: Tokens, types: &Mutex<Types>) -> usize {
