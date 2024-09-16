@@ -59,10 +59,10 @@ pub struct SymCorpus {
 
 type TypeChanges<'a> = HashMap<&'a str, Vec<(&'a Tokens, &'a Tokens)>>;
 
-struct ParallelLoadContext {
-    types: Mutex<Types>,
-    exports: Mutex<Exports>,
-    files: Mutex<SymFiles>,
+struct ParallelLoadContext<'a> {
+    types: Mutex<&'a mut Types>,
+    exports: Mutex<&'a mut Exports>,
+    files: Mutex<&'a mut SymFiles>,
 }
 
 impl SymCorpus {
@@ -150,9 +150,9 @@ impl SymCorpus {
         let next_work_idx = AtomicUsize::new(0);
 
         let load_context = ParallelLoadContext {
-            types: Mutex::new(Types::new()),
-            exports: Mutex::new(Exports::new()),
-            files: Mutex::new(SymFiles::new()),
+            types: Mutex::new(&mut self.types),
+            exports: Mutex::new(&mut self.exports),
+            files: Mutex::new(&mut self.files),
         };
 
         thread::scope(|s| {
@@ -180,11 +180,20 @@ impl SymCorpus {
             }
         });
 
-        *self = Self {
-            types: load_context.types.into_inner().unwrap(),
-            exports: load_context.exports.into_inner().unwrap(),
-            files: load_context.files.into_inner().unwrap(),
+        Ok(())
+    }
+
+    pub fn load_buffer<R>(&mut self, path: &Path, reader: R) -> Result<(), crate::Error>
+    where
+        R: io::Read,
+    {
+        let load_context = ParallelLoadContext {
+            types: Mutex::new(&mut self.types),
+            exports: Mutex::new(&mut self.exports),
+            files: Mutex::new(&mut self.files),
         };
+
+        Self::load_single(path, reader, &load_context)?;
 
         Ok(())
     }
@@ -285,7 +294,7 @@ impl SymCorpus {
             }
 
             // Insert the type into the corpus.
-            let variant_idx = Self::merge_type(name, tokens, &load_context.types);
+            let variant_idx = Self::merge_type(name, tokens, load_context);
 
             if is_consolidated {
                 // Record a mapping from the original variant name/index to the new one.
@@ -449,10 +458,10 @@ impl SymCorpus {
         tokens
     }
 
-    fn merge_type(name: &str, tokens: Tokens, types: &Mutex<Types>) -> usize {
-        let mut types = types.lock().unwrap();
+    fn merge_type(type_name: &str, tokens: Tokens, load_context: &ParallelLoadContext) -> usize {
+        let mut types = load_context.types.lock().unwrap();
         // TODO Use .entry()?
-        match types.get_mut(name) {
+        match types.get_mut(type_name) {
             Some(variants) => {
                 for (i, variant) in variants.iter().enumerate() {
                     if Self::are_tokens_eq(&tokens, variant) {
@@ -465,7 +474,7 @@ impl SymCorpus {
             None => {
                 let mut variants = Vec::new();
                 variants.push(tokens);
-                types.insert(name.to_string(), variants);
+                types.insert(type_name.to_string(), variants);
                 return 0;
             }
         }
