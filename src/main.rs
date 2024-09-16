@@ -1,7 +1,7 @@
 // Copyright (C) 2024 SUSE LLC <petr.pavlu@suse.com>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use ksyms::sym::SymCorpus;
+use ksymtypes::sym::SymCorpus;
 use log::debug;
 use std::path::Path;
 use std::time::Instant;

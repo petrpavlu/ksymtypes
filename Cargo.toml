@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 [package]
-name = "ksyms"
+name = "ksymtypes"
 version = "0.1.0"
 authors = ["Petr Pavlu <petr.pavlu@suse.com>"]
 edition = "2021"
