@@ -214,7 +214,7 @@ impl SymCorpus {
         let mut records = FileRecords::new();
         let mut remap = HashMap::new();
 
-        let mut lines = Self::read_lines(path, reader)?;
+        let lines = Self::read_lines(path, reader)?;
 
         // Detect whether the input is a single or consolidated symtypes file.
         let mut is_consolidated = false;
@@ -282,7 +282,7 @@ impl SymCorpus {
             // Handle a type/export record.
 
             // Turn the remaining words into tokens.
-            let mut tokens = Self::words_into_tokens(&mut words);
+            let tokens = Self::words_into_tokens(&mut words);
 
             // Parse any variant name/index which is appended as a suffix after the `@` character.
             let mut orig_variant_name = "";
