@@ -8,7 +8,7 @@ use std::path::Path;
 fn read_write_basic() {
     // Check reading of a single file and writing the consolidated output.
     let mut syms = SymCorpus::new();
-    syms.read_single(
+    syms.load_buffer(
         Path::new("test.symtypes"),
         concat!(
             "s#foo struct foo { int a ; }\n",
@@ -23,7 +23,7 @@ fn read_write_basic() {
         concat!(
             "s#foo struct foo { int a ; }\n",
             "bar int bar ( s#foo )\n",
-            "F#test.symtypes s#foo bar\n", //
+            "F#test.symtypes bar\n", //
         )
     );
 }
@@ -33,7 +33,7 @@ fn read_write_shared_struct() {
     // Check that a structure declaration shared by two files appears only once in the consolidated
     // output.
     let mut syms = SymCorpus::new();
-    syms.read_single(
+    syms.load_buffer(
         Path::new("test.symtypes"),
         concat!(
             "s#foo struct foo { int a ; }\n",
@@ -41,7 +41,7 @@ fn read_write_shared_struct() {
         )
         .as_bytes(),
     );
-    syms.read_single(
+    syms.load_buffer(
         Path::new("test2.symtypes"),
         concat!(
             "s#foo struct foo { int a ; }\n",
@@ -57,8 +57,8 @@ fn read_write_shared_struct() {
             "s#foo struct foo { int a ; }\n",
             "bar int bar ( s#foo )\n",
             "baz int baz ( s#foo )\n",
-            "F#test.symtypes s#foo bar\n",
-            "F#test2.symtypes s#foo baz\n", //
+            "F#test.symtypes bar\n",
+            "F#test2.symtypes baz\n", //
         )
     );
 }
@@ -68,7 +68,7 @@ fn read_write_differing_struct() {
     // Check that a structure declaration different in two files appears in all variants in the
     // consolidated output and they are correctly referenced by the F# entries.
     let mut syms = SymCorpus::new();
-    syms.read_single(
+    syms.load_buffer(
         Path::new("test.symtypes"),
         concat!(
             "s#foo struct foo { int a ; }\n",
@@ -76,7 +76,7 @@ fn read_write_differing_struct() {
         )
         .as_bytes(),
     );
-    syms.read_single(
+    syms.load_buffer(
         Path::new("test2.symtypes"),
         concat!(
             "s#foo struct foo { UNKNOWN }\n",
