@@ -1,0 +1,41 @@
+name: Continuous integration
+
+on: push
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    container: opensuse/tumbleweed
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain:
+          - distribution
+          - stable
+          - beta
+          - nightly
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+      - name: Install the ${{ matrix.toolchain }} Rust toolchain
+        shell: bash
+        run: |
+          if [ ${{ matrix.toolchain }} == distribution ]; then
+            zypper --non-interactive install cargo rust
+          else
+            zypper --non-interactive install rustup
+            rustup update ${{ matrix.toolchain }}
+            rustup default ${{ matrix.toolchain }}
+          fi
+      - name: Build the project
+        run: cargo build
+      - name: Run tests
+        run: cargo test
+      - name: Check documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps
