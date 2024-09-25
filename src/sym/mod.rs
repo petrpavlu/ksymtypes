@@ -303,12 +303,7 @@ impl SymCorpus {
                     .insert(orig_variant_name.to_string(), variant_idx);
             } else {
                 // Insert the record.
-                records.insert(base_name.to_string(), variant_idx);
-
-                if Self::is_export(base_name) {
-                    let mut exports = load_context.exports.lock().unwrap();
-                    exports.insert(base_name.to_string(), file_idx);
-                }
+                Self::insert_record(base_name, variant_idx, file_idx, &mut records, load_context)?;
             }
         }
 
@@ -352,12 +347,13 @@ impl SymCorpus {
                         })?;
 
                     // Insert the record.
-                    records.insert(base_name.to_string(), variant_idx);
-
-                    if Self::is_export(base_name) {
-                        let mut exports = load_context.exports.lock().unwrap();
-                        exports.insert(base_name.to_string(), file_idx);
-                    }
+                    Self::insert_record(
+                        base_name,
+                        variant_idx,
+                        file_idx,
+                        &mut records,
+                        load_context,
+                    )?;
                 }
 
                 // Add implicit references, ones that were omitted by the F# declaration because
@@ -468,6 +464,26 @@ impl SymCorpus {
                 return 0;
             }
         }
+    }
+
+    /// Inserts the type specified by `base_name@variant_idx` in the file `records` and registers it
+    /// with its `file_idx` in the `load_context.exports` if it is an exported symbol.
+    fn insert_record(
+        base_name: &str,
+        variant_idx: usize,
+        file_idx: usize,
+        records: &mut FileRecords,
+        load_context: &ParallelLoadContext,
+    ) -> Result<(), crate::Error> {
+        records.insert(base_name.to_string(), variant_idx);
+
+        if Self::is_export(base_name) {
+            // TODO Diagnose duplicates.
+            let mut exports = load_context.exports.lock().unwrap();
+            exports.insert(base_name.to_string(), file_idx);
+        }
+
+        Ok(())
     }
 
     /// Processes a single symbol in some file originated from an `F#` record and enhances the
