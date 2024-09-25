@@ -190,13 +190,9 @@ where
         return Err(());
     }
 
-    let path = match maybe_path {
-        Some(path) => path,
-        None => {
-            eprintln!("The consolidate source is missing");
-            return Err(());
-        }
-    };
+    let path = maybe_path.ok_or_else(|| {
+        eprintln!("The consolidate source is missing");
+    })?;
 
     // Do the consolidation.
     debug!("Consolidate '{}' to '{}'", path, output);
@@ -272,20 +268,12 @@ where
         return Err(());
     }
 
-    let path1 = match maybe_path1 {
-        Some(path1) => path1,
-        None => {
-            eprintln!("The first compare source is missing");
-            return Err(());
-        }
-    };
-    let path2 = match maybe_path2 {
-        Some(path2) => path2,
-        None => {
-            eprintln!("The second compare source is missing");
-            return Err(());
-        }
-    };
+    let path1 = maybe_path1.ok_or_else(|| {
+        eprintln!("The first compare source is missing");
+    })?;
+    let path2 = maybe_path2.ok_or_else(|| {
+        eprintln!("The second compare source is missing");
+    })?;
 
     // Do the comparison.
     debug!("Compare '{}' and '{}'", path1, path2);
