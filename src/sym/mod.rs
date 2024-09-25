@@ -284,32 +284,30 @@ impl SymCorpus {
             // Turn the remaining words into tokens.
             let tokens = Self::words_into_tokens(&mut words);
 
-            // Parse any variant name/index which is appended as a suffix after the `@` character.
-            let mut orig_variant_name = "";
-            if is_consolidated {
-                if let Some(i) = name.rfind('@') {
-                    orig_variant_name = &name[i + 1..];
-                    name = &name[..i];
-                }
-            }
+            // Parse the base name and any variant name/index, which is appended as a suffix after
+            // the `@` character.
+            let (base_name, orig_variant_name) = if is_consolidated {
+                Self::split_type_name(name)
+            } else {
+                (name, &name[name.len()..])
+            };
 
             // Insert the type into the corpus.
-            let variant_idx = Self::merge_type(name, tokens, load_context);
+            let variant_idx = Self::merge_type(base_name, tokens, load_context);
 
             if is_consolidated {
                 // Record a mapping from the original variant name/index to the new one.
                 remap
-                    .entry(name.to_string())
+                    .entry(base_name.to_string())
                     .or_insert_with(|| HashMap::new())
                     .insert(orig_variant_name.to_string(), variant_idx);
             } else {
-                // Add the line to the file records.
-                records.insert(name.to_string(), variant_idx);
+                // Insert the record.
+                records.insert(base_name.to_string(), variant_idx);
 
-                // Record any exports.
-                if Self::is_export(name) {
+                if Self::is_export(base_name) {
                     let mut exports = load_context.exports.lock().unwrap();
-                    exports.insert(name.to_string(), file_idx);
+                    exports.insert(base_name.to_string(), file_idx);
                 }
             }
         }
