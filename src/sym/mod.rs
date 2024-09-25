@@ -77,15 +77,9 @@ impl SymCorpus {
     // TODO Describe.
     pub fn load(&mut self, path: &Path, num_workers: i32) -> Result<(), crate::Error> {
         // Determine if the input is a directory tree or a single symtypes file.
-        let md = match fs::metadata(path) {
-            Ok(md) => md,
-            Err(err) => {
-                return Err(crate::Error::new_io(
-                    &format!("Failed to query path '{}'", path.display()),
-                    err,
-                ))
-            }
-        };
+        let md = fs::metadata(path).map_err(|err| {
+            crate::Error::new_io(&format!("Failed to query path '{}'", path.display()), err)
+        })?;
 
         // Collect recursively all symtypes if it is a directory, or push the single file.
         let mut symfiles = Vec::new();
@@ -102,26 +96,20 @@ impl SymCorpus {
     /// Collects recursively all symtypes under a given path.
     fn collect_symfiles(path: &Path, symfiles: &mut Vec<PathBuf>) -> Result<(), crate::Error> {
         // TODO Report errors and skip directories?
-        let dir_iter = match fs::read_dir(path) {
-            Ok(dir_iter) => dir_iter,
-            Err(err) => {
-                return Err(crate::Error::new_io(
-                    &format!("Failed to read directory '{}'", path.display()),
-                    err,
-                ))
-            }
-        };
+        let dir_iter = fs::read_dir(path).map_err(|err| {
+            crate::Error::new_io(
+                &format!("Failed to read directory '{}'", path.display()),
+                err,
+            )
+        })?;
 
         for maybe_entry in dir_iter {
-            let entry = match maybe_entry {
-                Ok(entry) => entry,
-                Err(err) => {
-                    return Err(crate::Error::new_io(
-                        &format!("Failed to read directory '{}'", path.display()),
-                        err,
-                    ))
-                }
-            };
+            let entry = maybe_entry.map_err(|err| {
+                crate::Error::new_io(
+                    &format!("Failed to read directory '{}'", path.display()),
+                    err,
+                )
+            })?;
             let entry_path = entry.path();
             if entry_path.is_dir() {
                 Self::collect_symfiles(&entry_path, symfiles)?;
@@ -158,24 +146,23 @@ impl SymCorpus {
         thread::scope(|s| {
             for _ in 0..num_workers {
                 // TODO Result/Error handling.
-                s.spawn(|| loop {
-                    let work_idx = next_work_idx.fetch_add(1, Ordering::Relaxed);
-                    if work_idx >= symfiles.len() {
-                        return Ok(());
-                    }
-                    let path = symfiles[work_idx].as_path();
+                s.spawn(|| -> Result<(), crate::Error> {
+                    loop {
+                        let work_idx = next_work_idx.fetch_add(1, Ordering::Relaxed);
+                        if work_idx >= symfiles.len() {
+                            return Ok(());
+                        }
+                        let path = symfiles[work_idx].as_path();
 
-                    let file = match File::open(path) {
-                        Ok(file) => file,
-                        Err(err) => {
-                            return Err(crate::Error::new_io(
+                        let file = File::open(path).map_err(|err| {
+                            crate::Error::new_io(
                                 &format!("Failed to open file '{}'", path.display()),
                                 err,
-                            ))
-                        }
-                    };
+                            )
+                        })?;
 
-                    Self::load_single(path, file, &load_context)?;
+                        Self::load_single(path, file, &load_context)?;
+                    }
                 });
             }
         });
