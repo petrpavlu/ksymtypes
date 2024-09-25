@@ -44,12 +44,12 @@ impl Drop for Timing {
 fn print_usage(program: &str) {
     print!(
         concat!(
-            "Usage: {} [OPTIONS] COMMAND\n",
+            "Usage: {} [OPTION...] COMMAND\n",
             "\n",
-            "OPTIONS\n",
+            "Options:\n",
             "  -h, --help            print this help\n",
             "\n",
-            "COMMAND\n",
+            "Commands:\n",
             "  consolidate           consolidate symtypes into a single file\n",
             "  compare               show differences between two symtypes corpuses\n",
         ),
@@ -61,10 +61,10 @@ fn print_usage(program: &str) {
 fn print_consolidate_usage(program: &str) {
     print!(
         concat!(
-            "Usage: {} consolidate [OPTIONS] DIR\n",
+            "Usage: {} consolidate [OPTION...] PATH\n",
             "Consolidate symtypes into a single file.\n",
             "\n",
-            "OPTIONS\n",
+            "Options:\n",
             "  -h, --help            print this help\n",
             "  -j, --jobs=NUM        use NUM workers to perform the operation simultaneously\n",
             "  -o, --output=FILE     write the result in a specified file, instead of stdout\n",
@@ -77,10 +77,10 @@ fn print_consolidate_usage(program: &str) {
 fn print_compare_usage(program: &str) {
     print!(
         concat!(
-            "Usage: {} compare [OPTIONS] DIR1 DIR2\n",
+            "Usage: {} compare [OPTION...] PATH1 PATH2\n",
             "Show differences between two symtypes corpuses.\n",
             "\n",
-            "OPTIONS\n",
+            "Options:\n",
             "  -h, --help            print this help\n",
             "  -j, --jobs=NUM        use NUM workers to perform the operation simultaneously\n",
         ),
