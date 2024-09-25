@@ -337,46 +337,28 @@ impl SymCorpus {
 
                 let mut records = FileRecords::new();
                 for mut type_name in words {
-                    // Parse the variant name/index.
-                    let orig_variant_name;
-                    match type_name.rfind('@') {
-                        Some(i) => {
-                            orig_variant_name = &type_name[i + 1..];
-                            type_name = &type_name[..i];
-                        }
-                        None => {
-                            orig_variant_name = "";
-                        }
-                    }
+                    // Parse the base name and variant name/index.
+                    let (base_name, orig_variant_name) = Self::split_type_name(type_name);
 
                     // Look up how the variant got remapped.
-                    // TODO De-duplicate error messages.
-                    let variant_idx = match remap.get(type_name) {
-                        Some(hash) => match hash.get(orig_variant_name) {
-                            Some(&variant_idx) => variant_idx,
-                            None => {
-                                return Err(crate::Error::new_parse(&format!(
-                                    "{}: Type {}@{} is not known",
-                                    path.display(),
-                                    type_name,
-                                    orig_variant_name,
-                                )))
-                            }
-                        },
-                        None => {
-                            return Err(crate::Error::new_parse(&format!(
-                                "{}: Type {}@{} is not known",
+                    let variant_idx = *remap
+                        .get(base_name)
+                        .and_then(|hash| hash.get(orig_variant_name))
+                        .ok_or_else(|| {
+                            crate::Error::new_parse(&format!(
+                                "{}:{}: Type {} is not known",
                                 path.display(),
-                                type_name,
-                                orig_variant_name,
-                            )))
-                        }
-                    };
-                    records.insert(type_name.to_string(), variant_idx);
+                                i + 1,
+                                type_name
+                            ))
+                        })?;
 
-                    if Self::is_export(type_name) {
+                    // Insert the record.
+                    records.insert(base_name.to_string(), variant_idx);
+
+                    if Self::is_export(base_name) {
                         let mut exports = load_context.exports.lock().unwrap();
-                        exports.insert(type_name.to_string(), file_idx);
+                        exports.insert(base_name.to_string(), file_idx);
                     }
                 }
 
@@ -456,6 +438,16 @@ impl SymCorpus {
             });
         }
         tokens
+    }
+
+    /// Splits a given type name into a tuple of two `&str`, with the first one being the base name
+    /// and the second one containing the variant name/index (or an empty string of no variant was
+    /// present).
+    fn split_type_name(type_name: &str) -> (&str, &str) {
+        match type_name.rfind('@') {
+            Some(i) => (&type_name[..i], &type_name[i + 1..]),
+            None => (type_name, &type_name[type_name.len()..]),
+        }
     }
 
     fn merge_type(type_name: &str, tokens: Tokens, load_context: &ParallelLoadContext) -> usize {
