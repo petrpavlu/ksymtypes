@@ -248,16 +248,13 @@ impl SymCorpus {
         for (i, line) in lines.iter().enumerate() {
             // Obtain a name of the record.
             let mut words = line.split_ascii_whitespace();
-            let mut name = match words.next() {
-                Some(word) => word,
-                None => {
-                    return Err(crate::Error::new_parse(&format!(
-                        "{}:{}: Expected a record name",
-                        path.display(),
-                        i + 1
-                    )))
-                }
-            };
+            let name = words.next().ok_or_else(|| {
+                crate::Error::new_parse(&format!(
+                    "{}:{}: Expected a record name",
+                    path.display(),
+                    i + 1
+                ))
+            })?;
 
             // Check if the record is a duplicate of another one.
             match all_names.get(name) {
