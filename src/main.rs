@@ -113,6 +113,11 @@ where
         };
     }
 
+    // Handle '-<short><value>'.
+    if let Some(value) = arg.strip_prefix(short) {
+        return Ok(Some(value.to_string()));
+    }
+
     // Handle '--<long>=<value>'.
     if let Some(rem) = arg.strip_prefix(long) {
         if let Some(value) = rem.strip_prefix("=") {
