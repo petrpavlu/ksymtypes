@@ -110,8 +110,21 @@ impl SymCorpus {
                     err,
                 )
             })?;
+
             let entry_path = entry.path();
-            if entry_path.is_dir() {
+
+            let md = fs::symlink_metadata(&entry_path).map_err(|err| {
+                crate::Error::new_io(
+                    &format!("Failed to query path '{}'", entry_path.display()),
+                    err,
+                )
+            })?;
+
+            if md.is_symlink() {
+                continue;
+            }
+
+            if md.is_dir() {
                 Self::collect_symfiles(&entry_path, symfiles)?;
                 continue;
             }
